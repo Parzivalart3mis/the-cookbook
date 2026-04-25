@@ -1,0 +1,131 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+/* Class-based dark mode — .dark on <html> triggers dark: utilities */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ─── Design tokens (CSS vars, change per theme) ─── */
+:root {
+  --surface: #faf9f7;
+  --surface-card: #ffffff;
+  --surface-hover: #f2ede8;
+  --ink: #1c1917;
+  --ink-muted: #78716c;
+  --ink-faint: #a8a29e;
+  --border-col: #e7e0d8;
+  --accent: #b45309;
+  --accent-hover: #92400e;
+  --accent-light: #fef9ee;
+  --tag-bg: #fef3c7;
+  --tag-text: #92400e;
+}
+
+.dark {
+  --surface: #171412;
+  --surface-card: #211e1b;
+  --surface-hover: #2a2420;
+  --ink: #f5f0eb;
+  --ink-muted: #a8a29e;
+  --ink-faint: #78716c;
+  --border-col: #2d2825;
+  --accent: #f59e0b;
+  --accent-hover: #fbbf24;
+  --accent-light: #1f1a0e;
+  --tag-bg: #292010;
+  --tag-text: #fbbf24;
+}
+
+/* ─── Map CSS vars into Tailwind utility classes ─── */
+@theme inline {
+  --color-surface: var(--surface);
+  --color-surface-card: var(--surface-card);
+  --color-surface-hover: var(--surface-hover);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-border: var(--border-col);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-light: var(--accent-light);
+  --color-tag-bg: var(--tag-bg);
+  --color-tag-text: var(--tag-text);
+
+  /* Font families — populated by next/font variables */
+  --font-display: var(--font-display, Georgia, serif);
+  --font-sans: var(--font-sans, system-ui, sans-serif);
+
+  /* Custom shadows with warm tint */
+  --shadow-card: 0 1px 3px 0 rgb(28 14 4 / 0.06), 0 1px 2px -1px rgb(28 14 4 / 0.04);
+  --shadow-card-hover: 0 6px 18px 0 rgb(28 14 4 / 0.1), 0 2px 6px -2px rgb(28 14 4 / 0.06);
+}
+
+/* ─── Base styles ─── */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* OpenType features for Inter */
+  font-feature-settings: "ss01", "cv11";
+}
+
+/* ─── Prose overrides (typography plugin) ─── */
+.prose {
+  --tw-prose-body: var(--ink);
+  --tw-prose-headings: var(--ink);
+  --tw-prose-lead: var(--ink-muted);
+  --tw-prose-links: var(--accent);
+  --tw-prose-bold: var(--ink);
+  --tw-prose-counters: var(--ink-muted);
+  --tw-prose-bullets: var(--border-col);
+  --tw-prose-hr: var(--border-col);
+  --tw-prose-quotes: var(--ink-muted);
+  --tw-prose-quote-borders: var(--border-col);
+  --tw-prose-captions: var(--ink-faint);
+  --tw-prose-code: var(--ink);
+  --tw-prose-pre-code: var(--ink-muted);
+  --tw-prose-pre-bg: var(--surface-card);
+  --tw-prose-th-borders: var(--border-col);
+  --tw-prose-td-borders: var(--border-col);
+
+  /* Invert tokens for dark mode */
+  --tw-prose-invert-body: var(--ink);
+  --tw-prose-invert-headings: var(--ink);
+  --tw-prose-invert-lead: var(--ink-muted);
+  --tw-prose-invert-links: var(--accent);
+  --tw-prose-invert-bold: var(--ink);
+  --tw-prose-invert-counters: var(--ink-muted);
+  --tw-prose-invert-bullets: var(--border-col);
+  --tw-prose-invert-hr: var(--border-col);
+  --tw-prose-invert-quotes: var(--ink-muted);
+  --tw-prose-invert-quote-borders: var(--border-col);
+  --tw-prose-invert-captions: var(--ink-faint);
+  --tw-prose-invert-code: var(--ink);
+  --tw-prose-invert-pre-code: var(--ink-muted);
+  --tw-prose-invert-pre-bg: var(--surface-card);
+  --tw-prose-invert-th-borders: var(--border-col);
+  --tw-prose-invert-td-borders: var(--border-col);
+}
+
+/* Use display font for all prose headings */
+.prose :where(h1, h2, h3, h4) {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* ─── Reduced motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
