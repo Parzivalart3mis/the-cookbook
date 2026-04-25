@@ -1,6 +1,6 @@
 import { getAllRecipes } from '@/lib/notion';
 import RecipeGrid from '@/components/RecipeGrid';
-import { BookOpen } from 'lucide-react';
+import { ChefHat } from 'lucide-react';
 
 export const revalidate = 60;
 
@@ -11,9 +11,6 @@ export default async function HomePage() {
     <div className="mx-auto max-w-5xl px-4 sm:px-6 py-12">
       {/* Hero */}
       <div className="mb-12">
-        <h1 className="font-display text-4xl sm:text-5xl font-semibold tracking-tight text-ink mb-3">
-          The Cookbook
-        </h1>
         <p className="text-ink-muted text-lg max-w-md">
           {recipes.length > 0
             ? `${recipes.length} ${recipes.length === 1 ? 'recipe' : 'recipes'} and counting.`
@@ -24,7 +21,7 @@ export default async function HomePage() {
       {recipes.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
           <div className="w-14 h-14 rounded-2xl bg-accent-light flex items-center justify-center">
-            <BookOpen size={24} className="text-accent" />
+            <ChefHat size={24} className="text-accent" />
           </div>
           <p className="font-display text-xl font-medium text-ink">No recipes yet</p>
           <p className="text-ink-muted text-sm max-w-xs">

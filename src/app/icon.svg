@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Hat body: dome top, straight sides -->
+  <path d="M22 68 L22 44 C22 22 35 14 50 14 C65 14 78 22 78 44 L78 68 Z" fill="#b45309"/>
+  <!-- Band: slightly wider, darker -->
+  <rect x="16" y="67" width="68" height="19" rx="5" fill="#92400e"/>
+</svg>
