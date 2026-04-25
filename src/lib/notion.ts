@@ -1,12 +1,32 @@
-import { Client, isFullPage } from '@notionhq/client';
-import type { BlockObjectResponse } from '@notionhq/client/build/src/api-endpoints';
+import { Client } from '@notionhq/client';
+import type { BlockObjectResponse, PageObjectResponse } from '@notionhq/client/build/src/api-endpoints';
 
-// Module-scoped singleton — one client per process
+// Module-scoped singleton — one client per process (used for blocks)
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
 
-// The Notion SDK v5 renamed "databases" to "data sources";
-// NOTION_DATABASE_ID still refers to the same Notion database ID
-const DATA_SOURCE_ID = process.env.NOTION_DATABASE_ID!;
+const DATABASE_ID = process.env.NOTION_DATABASE_ID!;
+const NOTION_VERSION = '2022-06-28';
+
+// notion.databases.query was removed in SDK v5; call the REST endpoint directly
+async function queryDatabase(args: {
+  database_id: string;
+  sorts?: Array<{ property: string; direction: 'ascending' | 'descending' }>;
+  start_cursor?: string;
+}): Promise<{ results: PageObjectResponse[]; has_more: boolean; next_cursor: string | null }> {
+  const { database_id, ...body } = args;
+  const res = await fetch(`https://api.notion.com/v1/databases/${database_id}/query`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.NOTION_TOKEN}`,
+      'Content-Type': 'application/json',
+      'Notion-Version': NOTION_VERSION,
+    },
+    body: JSON.stringify(body),
+    next: { revalidate: 60 },
+  });
+  if (!res.ok) throw new Error(`Notion API error ${res.status}: ${await res.text()}`);
+  return res.json();
+}
 
 export function slugify(text: string): string {
   return text
@@ -48,12 +68,10 @@ function parseProps(props: Props): Pick<RecipeSummary, 'name' | 'servings' | 'so
 }
 
 export async function getAllRecipes(): Promise<RecipeSummary[]> {
-  // SDK v5: notion.dataSources.query replaces notion.databases.query
-  // Returns empty array if the integration isn't connected yet (graceful build)
   let response;
   try {
-    response = await notion.dataSources.query({
-      data_source_id: DATA_SOURCE_ID,
+    response = await queryDatabase({
+      database_id: DATABASE_ID,
       sorts: [{ property: 'Name', direction: 'ascending' }],
     });
   } catch (err) {
@@ -61,7 +79,7 @@ export async function getAllRecipes(): Promise<RecipeSummary[]> {
     return [];
   }
 
-  return response.results.filter(isFullPage).map((page) => {
+  return response.results.map((page) => {
     const props = page.properties as Props;
     return {
       id: page.id,
