@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Fraunces, Inter } from 'next/font/google';
 import './globals.css';
 import SiteHeader from '@/components/SiteHeader';
@@ -19,6 +19,24 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: 'The Cookbook',
   description: 'A personal collection of recipes.',
+  manifest: '/site.webmanifest',
+  icons: {
+    icon: [
+      { url: '/favicon-16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/favicon-32.png', sizes: '32x32', type: 'image/png' },
+    ],
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
+    shortcut: '/favicon.ico',
+  },
+  appleWebApp: {
+    title: 'Cookbook',
+    statusBarStyle: 'default',
+    capable: true,
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#b45309',
 };
 
 export default function RootLayout({
