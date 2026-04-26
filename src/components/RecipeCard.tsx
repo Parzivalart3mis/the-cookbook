@@ -1,22 +1,32 @@
 'use client';
 
 import Link from 'next/link';
-import { motion, type Variants } from 'framer-motion';
+import { motion } from 'framer-motion';
 import type { RecipeSummary } from '@/lib/notion';
 
-export const cardVariants: Variants = {
-  hidden: { opacity: 0, y: 16 },
-  show: { opacity: 1, y: 0 },
-};
+const ease = [0.22, 1, 0.36, 1] as const;
 
-export default function RecipeCard({ recipe }: { recipe: RecipeSummary }) {
+export default function RecipeCard({
+  recipe,
+  index = 0,
+}: {
+  recipe: RecipeSummary;
+  index?: number;
+}) {
   return (
-    <motion.div variants={cardVariants}>
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.94, transition: { duration: 0.15, ease: 'easeIn' } }}
+      transition={{ duration: 0.4, delay: index * 0.055, ease }}
+    >
       <Link href={`/recipes/${recipe.slug}`} className="group block h-full">
         <motion.article
-          whileHover={{ y: -3 }}
-          transition={{ duration: 0.2, ease: 'easeOut' }}
-          className="h-full rounded-xl border border-border bg-surface-card p-5 shadow-card group-hover:shadow-card-hover group-hover:border-accent/20 transition-[border-color,box-shadow] duration-200"
+          whileHover={{ y: -6, scale: 1.018 }}
+          whileTap={{ scale: 0.97 }}
+          transition={{ duration: 0.22, ease: 'easeOut' }}
+          className="h-full rounded-xl border border-border bg-surface-card p-5 shadow-card group-hover:shadow-card-hover group-hover:border-accent/30 transition-[border-color,box-shadow] duration-200"
         >
           <h2 className="font-display text-lg font-semibold leading-snug text-ink group-hover:text-accent transition-colors duration-150 mb-3">
             {recipe.name}
@@ -32,12 +42,14 @@ export default function RecipeCard({ recipe }: { recipe: RecipeSummary }) {
             {recipe.tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5 ml-auto">
                 {recipe.tags.map((tag) => (
-                  <span
+                  <motion.span
                     key={tag}
-                    className="inline-block rounded-full bg-tag-bg px-2.5 py-0.5 text-xs font-medium text-tag-text"
+                    whileHover={{ scale: 1.1 }}
+                    transition={{ duration: 0.15 }}
+                    className="inline-block cursor-default rounded-full bg-tag-bg px-2.5 py-0.5 text-xs font-medium text-tag-text"
                   >
                     {tag}
-                  </span>
+                  </motion.span>
                 ))}
               </div>
             )}

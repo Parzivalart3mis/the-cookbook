@@ -1,9 +1,8 @@
 import { notFound } from 'next/navigation';
-import Link from 'next/link';
 import { getAllRecipes, getRecipeBySlug } from '@/lib/notion';
 import RecipeBody from '@/components/RecipeBody';
 import RecipeMeta from '@/components/RecipeMeta';
-import { ArrowLeft } from 'lucide-react';
+import { MotionPage, MotionItem, BackLink } from '@/components/DetailMotion';
 
 export const revalidate = 60;
 
@@ -34,27 +33,21 @@ export default async function RecipePage({
   if (!recipe) notFound();
 
   return (
-    <div className="mx-auto max-w-2xl px-4 sm:px-6 py-10 sm:py-14">
-      {/* Back link */}
-      <Link
-        href="/"
-        className="inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-accent transition-colors duration-150 mb-10"
-      >
-        <ArrowLeft size={14} />
-        All recipes
-      </Link>
+    <MotionPage className="mx-auto max-w-2xl px-4 sm:px-6 py-10 sm:py-14">
+      <BackLink />
 
-      {/* Heading */}
-      <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight text-ink leading-tight mb-4">
-        {recipe.name}
-      </h1>
+      <MotionItem>
+        <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight text-ink leading-tight mb-4">
+          {recipe.name}
+        </h1>
+      </MotionItem>
 
-      {/* Meta line */}
-      <RecipeMeta servings={recipe.servings} source={recipe.source} />
+      <MotionItem>
+        <RecipeMeta servings={recipe.servings} source={recipe.source} />
+      </MotionItem>
 
-      {/* Tags */}
       {recipe.tags.length > 0 && (
-        <div className="flex flex-wrap gap-2 mt-3">
+        <MotionItem className="flex flex-wrap gap-2 mt-3">
           {recipe.tags.map((tag) => (
             <span
               key={tag}
@@ -63,14 +56,16 @@ export default async function RecipePage({
               {tag}
             </span>
           ))}
-        </div>
+        </MotionItem>
       )}
 
-      {/* Divider */}
-      <div className="my-8 border-t border-border" />
+      <MotionItem>
+        <div className="my-8 border-t border-border" />
+      </MotionItem>
 
-      {/* Body */}
-      <RecipeBody blocks={recipe.blocks} />
-    </div>
+      <MotionItem>
+        <RecipeBody blocks={recipe.blocks} />
+      </MotionItem>
+    </MotionPage>
   );
 }
