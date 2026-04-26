@@ -18,12 +18,12 @@ function renderRichText(richText: RichTextItem[], { skipBold = false } = {}): Re
     const applyBold = bold && !skipBold;
     let node: React.ReactNode = span.plain_text;
 
-    if (code)        node = <code key={i}>{node}</code>;
-    if (applyBold)   node = <strong key={i}>{node}</strong>;
-    if (italic)      node = <em key={i}>{node}</em>;
-    if (strikethrough) node = <del key={i}>{node}</del>;
-    if (underline)   node = <u key={i}>{node}</u>;
-    if (span.href)   node = <a key={i} href={span.href} target="_blank" rel="noopener noreferrer">{node}</a>;
+    if (code)           node = <code key={i}>{node}</code>;
+    if (applyBold)      node = <strong key={i}>{node}</strong>;
+    if (italic)         node = <em key={i}>{node}</em>;
+    if (strikethrough)  node = <del key={i}>{node}</del>;
+    if (underline)      node = <u key={i}>{node}</u>;
+    if (span.href)      node = <a key={i} href={span.href} target="_blank" rel="noopener noreferrer">{node}</a>;
 
     if (!code && !applyBold && !italic && !strikethrough && !underline && !span.href) {
       node = <span key={i}>{node}</span>;
@@ -96,7 +96,6 @@ export default function RecipeBody({ blocks }: { blocks: BlockObjectResponse[] }
           case 'paragraph': return hasContent ? <p key={block.id}>{rendered}</p> : null;
           case 'quote':     return <blockquote key={block.id}>{rendered}</blockquote>;
           case 'divider':   return <hr key={block.id} />;
-          // TODO: image blocks
           default:          return null;
         }
       })}

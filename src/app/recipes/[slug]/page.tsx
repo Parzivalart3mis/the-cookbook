@@ -1,9 +1,10 @@
 import { notFound } from 'next/navigation';
 import { getAllRecipes, getRecipeBySlug } from '@/lib/notion';
-import RecipeBody from '@/components/RecipeBody';
 import RecipeMeta from '@/components/RecipeMeta';
 import { MotionPage, MotionItem, BackLink } from '@/components/DetailMotion';
 import NutritionModal from '@/components/NutritionModal';
+import ReadingProgress from '@/components/ReadingProgress';
+import RecipeBody from '@/components/RecipeBody';
 
 export const revalidate = 60;
 
@@ -35,6 +36,7 @@ export default async function RecipePage({
 
   return (
     <MotionPage className="mx-auto max-w-2xl px-4 sm:px-6 py-10 sm:py-14">
+      <ReadingProgress />
       <BackLink />
 
       <MotionItem>

@@ -85,9 +85,9 @@ function parseProps(props: Props): Pick<RecipeSummary, 'name' | 'servings' | 'so
 
   return {
     name,
-    servings:  (props.Servings?.number as number | null) ?? null,
-    source:    (props.Source?.url as string | null) ?? null,
-    tags:      ((props.Tags?.multi_select ?? []) as Array<{ name: string }>).map((t) => t.name),
+    servings:   (props.Servings?.number as number | null) ?? null,
+    source:     (props.Source?.url as string | null) ?? null,
+    tags:       ((props.Tags?.multi_select ?? []) as Array<{ name: string }>).map((t) => t.name),
     nutrition: {
       calories:           num('Calories'),
       totalFat:           num('Total Fat'),

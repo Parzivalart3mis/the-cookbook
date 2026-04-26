@@ -41,7 +41,7 @@ function Row({
 
   return (
     <div
-      className={`flex items-baseline justify-between border-b border-black py-[2px] text-sm leading-snug ${pl}`}
+      className={`flex items-baseline justify-between border-b border-black dark:border-white py-[2px] text-sm leading-snug ${pl}`}
     >
       <span>
         <span className={bold ? 'font-bold' : 'font-normal'}>{name}</span>{' '}
@@ -77,11 +77,10 @@ export default function NutritionFacts({
   if (!hasAny) return null;
 
   return (
-    // Always white / black — the FDA label is a physical-world artefact
-    <div className="border-[3px] border-black bg-white text-black w-full max-w-xs select-none">
+    <div className="border-[3px] border-black dark:border-white bg-white dark:bg-neutral-900 text-black dark:text-white w-full max-w-xs select-none">
 
       {/* ── Header ── */}
-      <div className="px-2 pt-1 pb-1 border-b-[10px] border-black">
+      <div className="px-2 pt-1 pb-1 border-b-[10px] border-black dark:border-white">
         <p className="font-black leading-none tracking-tight" style={{ fontSize: '2rem' }}>
           Nutrition Facts
         </p>
@@ -95,7 +94,7 @@ export default function NutritionFacts({
       </div>
 
       {/* ── Calories ── */}
-      <div className="px-2 border-b-[5px] border-black pt-1 pb-0.5">
+      <div className="px-2 border-b-[5px] border-black dark:border-white pt-1 pb-0.5">
         <p className="text-xs font-bold">Amount Per Serving</p>
         <div className="flex items-end justify-between">
           <span className="text-xl font-bold leading-none">Calories</span>
@@ -109,7 +108,7 @@ export default function NutritionFacts({
       </div>
 
       {/* ── % DV header ── */}
-      <div className="px-2 border-b border-black py-px text-right">
+      <div className="px-2 border-b border-black dark:border-white py-px text-right">
         <span className="text-xs font-bold">% Daily Value*</span>
       </div>
 
@@ -130,29 +129,29 @@ export default function NutritionFacts({
         <Row name="Sugar Alcohols"       value={nutrition.sugarAlcohols}      unit="g"                             indent={1} bold={false} />
 
         {/* Thick bar before Protein */}
-        <div className="-mx-2 px-2 border-b-[7px] border-black">
+        <div className="-mx-2 px-2 border-b-[7px] border-black dark:border-white">
           <Row name="Protein" value={nutrition.protein} unit="g" dv={DV.protein} />
         </div>
       </div>
 
       {/* ── Micronutrients ── */}
-      <div className="px-2 py-1 border-b-[3px] border-black text-sm">
+      <div className="px-2 py-1 border-b-[3px] border-black dark:border-white text-sm">
         <div className="flex flex-wrap gap-x-3 gap-y-0.5">
           <Micro name="Vitamin D" value={nutrition.vitaminD} />
-          <span className="text-gray-300 select-none">•</span>
+          <span className="text-gray-300 dark:text-gray-600 select-none">•</span>
           <Micro name="Vitamin A" value={nutrition.vitaminA} />
-          <span className="text-gray-300 select-none">•</span>
+          <span className="text-gray-300 dark:text-gray-600 select-none">•</span>
           <Micro name="Vitamin C" value={nutrition.vitaminC} />
-          <span className="text-gray-300 select-none">•</span>
+          <span className="text-gray-300 dark:text-gray-600 select-none">•</span>
           <Micro name="Calcium"   value={nutrition.calcium} />
-          <span className="text-gray-300 select-none">•</span>
+          <span className="text-gray-300 dark:text-gray-600 select-none">•</span>
           <Micro name="Iron"      value={nutrition.iron} />
         </div>
       </div>
 
       {/* ── Footnote ── */}
       <div className="px-2 pt-1 pb-1.5">
-        <p className="text-[0.6rem] leading-tight text-black">
+        <p className="text-[0.6rem] leading-tight">
           * The % Daily Value (DV) tells you how much a nutrient in a serving
           contributes to a daily diet. 2,000 calories a day is used for general
           nutrition advice.
