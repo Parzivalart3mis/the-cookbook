@@ -1,5 +1,5 @@
 import { getAllRecipes } from '@/lib/notion';
-import RecipeGrid from '@/components/RecipeGrid';
+import RecipeSearch from '@/components/RecipeSearch';
 import { ChefHat } from 'lucide-react';
 
 export const revalidate = 60;
@@ -29,7 +29,7 @@ export default async function HomePage() {
           </p>
         </div>
       ) : (
-        <RecipeGrid recipes={recipes} />
+        <RecipeSearch recipes={recipes} />
       )}
     </div>
   );
