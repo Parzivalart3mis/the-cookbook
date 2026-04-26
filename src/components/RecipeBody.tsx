@@ -1,16 +1,41 @@
 import type { BlockObjectResponse } from '@notionhq/client/build/src/api-endpoints';
 
-type RichTextItem = { plain_text: string };
+type RichTextItem = {
+  plain_text: string;
+  href: string | null;
+  annotations: {
+    bold: boolean;
+    italic: boolean;
+    strikethrough: boolean;
+    underline: boolean;
+    code: boolean;
+  };
+};
 
-// TODO: rich text formatting (bold, italic, links)
-function extractText(richText: RichTextItem[]): string {
-  return richText.map((t) => t.plain_text).join('');
+function renderRichText(richText: RichTextItem[], { skipBold = false } = {}): React.ReactNode {
+  return richText.map((span, i) => {
+    const { bold, italic, strikethrough, underline, code } = span.annotations;
+    const applyBold = bold && !skipBold;
+    let node: React.ReactNode = span.plain_text;
+
+    if (code)        node = <code key={i}>{node}</code>;
+    if (applyBold)   node = <strong key={i}>{node}</strong>;
+    if (italic)      node = <em key={i}>{node}</em>;
+    if (strikethrough) node = <del key={i}>{node}</del>;
+    if (underline)   node = <u key={i}>{node}</u>;
+    if (span.href)   node = <a key={i} href={span.href} target="_blank" rel="noopener noreferrer">{node}</a>;
+
+    if (!code && !applyBold && !italic && !strikethrough && !underline && !span.href) {
+      node = <span key={i}>{node}</span>;
+    }
+
+    return node;
+  });
 }
 
-function getBlockText(block: BlockObjectResponse): string {
+function getBlockRichText(block: BlockObjectResponse): RichTextItem[] {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const data = (block as any)[block.type];
-  return extractText(data?.rich_text ?? []);
+  return ((block as any)[block.type]?.rich_text ?? []) as RichTextItem[];
 }
 
 type ListGroup = {
@@ -32,10 +57,7 @@ function groupBlocks(blocks: BlockObjectResponse[]): RenderedGroup[] {
       if (last && 'kind' in last && last.kind === block.type) {
         last.items.push(block);
       } else {
-        groups.push({
-          kind: block.type as ListGroup['kind'],
-          items: [block],
-        });
+        groups.push({ kind: block.type as ListGroup['kind'], items: [block] });
       }
     } else {
       groups.push(block);
@@ -45,11 +67,7 @@ function groupBlocks(blocks: BlockObjectResponse[]): RenderedGroup[] {
   return groups;
 }
 
-export default function RecipeBody({
-  blocks,
-}: {
-  blocks: BlockObjectResponse[];
-}) {
+export default function RecipeBody({ blocks }: { blocks: BlockObjectResponse[] }) {
   const groups = groupBlocks(blocks);
 
   return (
@@ -60,31 +78,26 @@ export default function RecipeBody({
           return (
             <Tag key={i}>
               {group.items.map((item) => (
-                <li key={item.id}>{getBlockText(item)}</li>
+                <li key={item.id}>{renderRichText(getBlockRichText(item))}</li>
               ))}
             </Tag>
           );
         }
 
         const block = group;
-        const text = getBlockText(block);
+        const rich = getBlockRichText(block);
+        const rendered = renderRichText(rich);
+        const hasContent = rich.some((r) => r.plain_text.trim());
 
         switch (block.type) {
-          case 'heading_1':
-            return <h1 key={block.id}>{text}</h1>;
-          case 'heading_2':
-            return <h2 key={block.id}>{text}</h2>;
-          case 'heading_3':
-            return <h3 key={block.id}>{text}</h3>;
-          case 'paragraph':
-            return text ? <p key={block.id}>{text}</p> : null;
-          case 'quote':
-            return <blockquote key={block.id}>{text}</blockquote>;
-          case 'divider':
-            return <hr key={block.id} />;
+          case 'heading_1': return <h1 key={block.id}>{renderRichText(rich, { skipBold: true })}</h1>;
+          case 'heading_2': return <h2 key={block.id}>{renderRichText(rich, { skipBold: true })}</h2>;
+          case 'heading_3': return <h3 key={block.id}>{renderRichText(rich, { skipBold: true })}</h3>;
+          case 'paragraph': return hasContent ? <p key={block.id}>{rendered}</p> : null;
+          case 'quote':     return <blockquote key={block.id}>{rendered}</blockquote>;
+          case 'divider':   return <hr key={block.id} />;
           // TODO: image blocks
-          default:
-            return null;
+          default:          return null;
         }
       })}
     </div>
