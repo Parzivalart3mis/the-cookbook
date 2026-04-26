@@ -1,11 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <!-- Amber background -->
   <rect width="512" height="512" fill="#b45309"/>
-
-  <!-- Hat body: dome, ~15% padding from edges -->
-  <path d="M116 352 L116 206 C116 100 152 80 256 80 C360 80 396 100 396 206 L396 352 Z"
-        fill="white"/>
-
-  <!-- Hat band: slightly wider, slight opacity diff to show the two parts -->
-  <rect x="86" y="344" width="340" height="96" rx="12" fill="white" opacity="0.88"/>
+  <!-- Lucide ChefHat paths scaled to fill center with ~15% padding -->
+  <svg x="77" y="77" width="358" height="358" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M17 21a1 1 0 0 0 1-1v-5.35c0-.457.316-.844.727-1.041a4 4 0 0 0-2.134-7.589 5 5 0 0 0-9.186 0 4 4 0 0 0-2.134 7.588c.411.198.727.585.727 1.041V20a1 1 0 0 0 1 1Z"/>
+    <path d="M6 17h12"/>
+  </svg>
 </svg>
