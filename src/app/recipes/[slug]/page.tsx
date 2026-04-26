@@ -3,6 +3,7 @@ import { getAllRecipes, getRecipeBySlug } from '@/lib/notion';
 import RecipeBody from '@/components/RecipeBody';
 import RecipeMeta from '@/components/RecipeMeta';
 import { MotionPage, MotionItem, BackLink } from '@/components/DetailMotion';
+import NutritionModal from '@/components/NutritionModal';
 
 export const revalidate = 60;
 
@@ -43,7 +44,9 @@ export default async function RecipePage({
       </MotionItem>
 
       <MotionItem>
-        <RecipeMeta servings={recipe.servings} source={recipe.source} />
+        <RecipeMeta servings={recipe.servings} source={recipe.source}>
+          <NutritionModal nutrition={recipe.nutrition} servings={recipe.servings} />
+        </RecipeMeta>
       </MotionItem>
 
       {recipe.tags.length > 0 && (
@@ -66,6 +69,8 @@ export default async function RecipePage({
       <MotionItem>
         <RecipeBody blocks={recipe.blocks} />
       </MotionItem>
+
+
     </MotionPage>
   );
 }

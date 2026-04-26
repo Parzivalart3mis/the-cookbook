@@ -35,6 +35,29 @@ export function slugify(text: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+export interface Nutrition {
+  calories:            number | null;
+  totalFat:            number | null;
+  saturatedFat:        number | null;
+  polyunsaturatedFat:  number | null;
+  monounsaturatedFat:  number | null;
+  transFat:            number | null;
+  cholesterol:         number | null;
+  sodium:              number | null;
+  potassium:           number | null;
+  totalCarbohydrates:  number | null;
+  dietaryFiber:        number | null;
+  sugars:              number | null;
+  addedSugars:         number | null;
+  sugarAlcohols:       number | null;
+  protein:             number | null;
+  vitaminA:            number | null; // stored as %DV directly
+  vitaminC:            number | null;
+  calcium:             number | null;
+  iron:                number | null;
+  vitaminD:            number | null;
+}
+
 export interface RecipeSummary {
   id: string;
   slug: string;
@@ -42,6 +65,7 @@ export interface RecipeSummary {
   servings: number | null;
   source: string | null;
   tags: string[];
+  nutrition: Nutrition;
 }
 
 export interface Recipe extends RecipeSummary {
@@ -52,18 +76,40 @@ export interface Recipe extends RecipeSummary {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Props = Record<string, any>;
 
-function parseProps(props: Props): Pick<RecipeSummary, 'name' | 'servings' | 'source' | 'tags'> {
+function parseProps(props: Props): Pick<RecipeSummary, 'name' | 'servings' | 'source' | 'tags' | 'nutrition'> {
   // properties.Name.title can be empty array if page is untitled
   const titleArr: Array<{ plain_text: string }> = props.Name?.title ?? [];
   const name = titleArr.map((t) => t.plain_text).join('') || 'Untitled';
 
+  const num = (key: string): number | null => (props[key]?.number as number | null) ?? null;
+
   return {
     name,
-    servings: (props.Servings?.number as number | null) ?? null,
-    source: (props.Source?.url as string | null) ?? null,
-    tags: ((props.Tags?.multi_select ?? []) as Array<{ name: string }>).map(
-      (t) => t.name
-    ),
+    servings:  (props.Servings?.number as number | null) ?? null,
+    source:    (props.Source?.url as string | null) ?? null,
+    tags:      ((props.Tags?.multi_select ?? []) as Array<{ name: string }>).map((t) => t.name),
+    nutrition: {
+      calories:           num('Calories'),
+      totalFat:           num('Total Fat'),
+      saturatedFat:       num('Saturated Fat'),
+      polyunsaturatedFat: num('Polyunsaturated Fat'),
+      monounsaturatedFat: num('Monounsaturated Fat'),
+      transFat:           num('Trans Fat'),
+      cholesterol:        num('Cholesterol'),
+      sodium:             num('Sodium'),
+      potassium:          num('Potassium'),
+      totalCarbohydrates: num('Total Carbohydrates'),
+      dietaryFiber:       num('Dietary Fiber'),
+      sugars:             num('Sugars'),
+      addedSugars:        num('Added Sugars'),
+      sugarAlcohols:      num('Sugar Alcohols'),
+      protein:            num('Protein'),
+      vitaminA:           num('Vitamin A'),
+      vitaminC:           num('Vitamin C'),
+      calcium:            num('Calcium'),
+      iron:               num('Iron'),
+      vitaminD:           num('Vitamin D'),
+    },
   };
 }
 
