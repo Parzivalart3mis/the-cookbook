@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Sparkles, Send, X, Zap, BrainCircuit, Globe, Loader2, ChevronDown } from 'lucide-react';
+import { Sparkles, Send, X, Zap, BrainCircuit, Globe, Loader2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ChatMessage } from '@/app/api/recipe-chat/route';
 
@@ -16,7 +16,6 @@ const MODELS: { key: ModelKey | 'auto'; label: string; Icon: React.ElementType; 
 
 interface DisplayMessage extends ChatMessage {
   model?: ModelKey;
-  thinking?: string;  // chain-of-thought text from delta.reasoning
 }
 
 export default function RecipeChat({ recipeContext }: { recipeContext: string }) {
@@ -104,23 +103,10 @@ export default function RecipeChat({ recipeContext }: { recipeContext: string })
               setHistory((h) => h.map((msg, i) => i === assistantIdx ? { ...msg, model: m } : msg));
               continue;
             }
-            const delta = parsed.choices?.[0]?.delta ?? {};
-            // Reasoning / thinking tokens
-            if (delta.reasoning) {
+            const token = parsed.choices?.[0]?.delta?.content ?? '';
+            if (token) {
               setHistory((h) =>
-                h.map((msg, i) =>
-                  i === assistantIdx
-                    ? { ...msg, thinking: (msg.thinking ?? '') + delta.reasoning }
-                    : msg
-                )
-              );
-            }
-            // Actual response content
-            if (delta.content) {
-              setHistory((h) =>
-                h.map((msg, i) =>
-                  i === assistantIdx ? { ...msg, content: msg.content + delta.content } : msg
-                )
+                h.map((msg, i) => i === assistantIdx ? { ...msg, content: msg.content + token } : msg)
               );
             }
           } catch {}
@@ -243,9 +229,6 @@ export default function RecipeChat({ recipeContext }: { recipeContext: string })
                       {msg.role === 'assistant' && msg.model && (
                         <ModelLabel modelKey={msg.model} />
                       )}
-                      {msg.role === 'assistant' && msg.thinking && (
-                        <ThinkingBlock text={msg.thinking} done={!!msg.content} />
-                      )}
                       <div
                         className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed max-w-[85%] whitespace-pre-wrap ${
                           msg.role === 'user'
@@ -257,7 +240,7 @@ export default function RecipeChat({ recipeContext }: { recipeContext: string })
                           <span className="flex items-center gap-1.5 text-ink-faint">
                             <Loader2 size={12} className="animate-spin" />
                             <span className="text-xs">
-                              {msg.thinking ? 'Writing answer…' : `${MODELS.find(m => m.key === streamingModel)?.label ?? 'Loading'}…`}
+                              {MODELS.find(m => m.key === streamingModel)?.label ?? 'Thinking'}…
                             </span>
                           </span>
                         )}
@@ -300,31 +283,6 @@ export default function RecipeChat({ recipeContext }: { recipeContext: string })
         )}
       </AnimatePresence>
     </>
-  );
-}
-
-function ThinkingBlock({ text, done }: { text: string; done: boolean }) {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <div className="text-[0.65rem] text-ink-faint border border-border rounded-lg overflow-hidden mb-1 max-w-[85%]">
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 w-full hover:bg-surface-hover transition-colors duration-100"
-      >
-        {!done && <Loader2 size={9} className="animate-spin shrink-0" />}
-        <BrainCircuit size={9} className="text-violet-400 shrink-0" />
-        <span className="font-medium">Thinking{!done ? '…' : ''}</span>
-        <ChevronDown
-          size={9}
-          className={`ml-auto transition-transform duration-150 ${expanded ? 'rotate-180' : ''}`}
-        />
-      </button>
-      {expanded && (
-        <div className="px-2.5 pb-2 pt-0.5 border-t border-border text-ink-faint whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto">
-          {text}
-        </div>
-      )}
-    </div>
   );
 }
 
