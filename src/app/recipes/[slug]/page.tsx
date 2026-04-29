@@ -1,10 +1,24 @@
 import { notFound } from 'next/navigation';
 import { getAllRecipes, getRecipeBySlug } from '@/lib/notion';
+import type { BlockObjectResponse } from '@notionhq/client/build/src/api-endpoints';
 import RecipeMeta from '@/components/RecipeMeta';
 import { MotionPage, MotionItem, BackLink } from '@/components/DetailMotion';
 import NutritionModal from '@/components/NutritionModal';
 import ReadingProgress from '@/components/ReadingProgress';
 import RecipeBody from '@/components/RecipeBody';
+import RecipeChat from '@/components/RecipeChat';
+
+// Serialize Notion blocks to plain text for the AI context window
+function blocksToPlainText(blocks: BlockObjectResponse[]): string {
+  return blocks
+    .map((block) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const richText: Array<{ plain_text: string }> = (block as any)[block.type]?.rich_text ?? [];
+      return richText.map((r) => r.plain_text).join('');
+    })
+    .filter(Boolean)
+    .join('\n');
+}
 
 export const revalidate = 60;
 
@@ -34,6 +48,16 @@ export default async function RecipePage({
 
   if (!recipe) notFound();
 
+  const recipeContext = [
+    `Recipe: ${recipe.name}`,
+    recipe.servings   ? `Serves: ${recipe.servings}`                : '',
+    recipe.prepTime   ? `Prep time: ${recipe.prepTime} minutes`     : '',
+    recipe.cookTime   ? `Cook time: ${recipe.cookTime} minutes`     : '',
+    recipe.tags.length ? `Tags: ${recipe.tags.join(', ')}`          : '',
+    '',
+    blocksToPlainText(recipe.blocks),
+  ].filter(Boolean).join('\n');
+
   return (
     <MotionPage className="mx-auto max-w-2xl px-4 sm:px-6 py-10 sm:py-14">
       <ReadingProgress />
@@ -46,7 +70,12 @@ export default async function RecipePage({
       </MotionItem>
 
       <MotionItem>
-        <RecipeMeta servings={recipe.servings} source={recipe.source}>
+        <RecipeMeta
+          servings={recipe.servings}
+          prepTime={recipe.prepTime}
+          cookTime={recipe.cookTime}
+          source={recipe.source}
+        >
           <NutritionModal nutrition={recipe.nutrition} servings={recipe.servings} />
         </RecipeMeta>
       </MotionItem>
@@ -69,9 +98,12 @@ export default async function RecipePage({
       </MotionItem>
 
       <MotionItem>
-        <RecipeBody blocks={recipe.blocks} />
+        <RecipeBody blocks={recipe.blocks} slug={recipe.slug} />
       </MotionItem>
 
+      <MotionItem>
+        <RecipeChat recipeContext={recipeContext} />
+      </MotionItem>
 
     </MotionPage>
   );

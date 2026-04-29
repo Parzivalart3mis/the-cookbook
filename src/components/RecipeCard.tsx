@@ -2,9 +2,17 @@
 
 import Link from 'next/link';
 import { motion } from 'framer-motion';
+import { Clock } from 'lucide-react';
 import type { RecipeSummary } from '@/lib/notion';
 
 const ease = [0.22, 1, 0.36, 1] as const;
+
+function formatTime(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
 
 export default function RecipeCard({
   recipe,
@@ -13,6 +21,11 @@ export default function RecipeCard({
   recipe: RecipeSummary;
   index?: number;
 }) {
+  const totalTime =
+    recipe.prepTime !== null && recipe.cookTime !== null
+      ? recipe.prepTime + recipe.cookTime
+      : recipe.prepTime ?? recipe.cookTime ?? null;
+
   return (
     <motion.div
       layout
@@ -32,12 +45,20 @@ export default function RecipeCard({
             {recipe.name}
           </h2>
 
-          <div className="flex items-center justify-between gap-3 mt-auto">
-            {recipe.servings !== null && (
-              <span className="text-xs text-ink-muted tabular-nums">
-                {recipe.servings} {recipe.servings === 1 ? 'serving' : 'servings'}
-              </span>
-            )}
+          <div className="flex items-center justify-between gap-3 mt-auto flex-wrap">
+            <div className="flex items-center gap-3">
+              {recipe.servings !== null && (
+                <span className="text-xs text-ink-muted tabular-nums">
+                  {recipe.servings} {recipe.servings === 1 ? 'serving' : 'servings'}
+                </span>
+              )}
+              {totalTime !== null && (
+                <span className="flex items-center gap-1 text-xs text-ink-muted tabular-nums">
+                  <Clock size={11} className="text-accent" />
+                  {formatTime(totalTime)}
+                </span>
+              )}
+            </div>
 
             {recipe.tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5 ml-auto">
