@@ -58,13 +58,22 @@ export async function POST(req: NextRequest) {
   const modelKey: ModelKey = modelOverride ?? classifyQuery(message);
   const modelId = MODELS[modelKey];
 
+  // Keep input well under the 8 000-token model limit.
+  // ~4 chars per token → 14 000 chars ≈ 3 500 tokens for the recipe,
+  // leaving ~4 500 tokens for the system wrapper, history, and user message.
+  const MAX_CONTEXT_CHARS = 14_000;
+  const safeContext =
+    recipeContext.length > MAX_CONTEXT_CHARS
+      ? recipeContext.slice(0, MAX_CONTEXT_CHARS) + '\n[recipe truncated for length]'
+      : recipeContext;
+
   const systemPrompt = `You are a knowledgeable, friendly cooking assistant. The user is reading this recipe:
 
 ---
-${recipeContext}
+${safeContext}
 ---
 
-Answer their questions concisely and practically. Focus on actionable advice. If asked about substitutions, give exact amounts. Keep responses under 200 words unless the question genuinely requires more detail.`;
+Answer concisely and practically. For substitutions give exact amounts. Keep responses under 150 words unless the question genuinely needs more.`;
 
   const messages = [
     { role: 'system', content: systemPrompt },
@@ -85,7 +94,7 @@ Answer their questions concisely and practically. Focus on actionable advice. If
         messages,
         stream: true,
         temperature: 0.7,
-        max_tokens: 8192,
+        max_tokens: 1024,
       }),
     });
   } catch (err) {
