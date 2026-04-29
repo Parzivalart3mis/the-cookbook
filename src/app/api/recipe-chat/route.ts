@@ -85,7 +85,7 @@ Answer their questions concisely and practically. Focus on actionable advice. If
         messages,
         stream: true,
         temperature: 0.7,
-        max_tokens: 512,
+        max_tokens: 8192,
       }),
     });
   } catch (err) {
