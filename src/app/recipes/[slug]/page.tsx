@@ -80,8 +80,8 @@ export default async function RecipePage({
         </RecipeMeta>
       </MotionItem>
 
-      {recipe.tags.length > 0 && (
-        <MotionItem className="flex flex-wrap gap-2 mt-3">
+      <MotionItem>
+        <div className="flex flex-wrap items-center gap-2 mt-3">
           {recipe.tags.map((tag) => (
             <span
               key={tag}
@@ -90,8 +90,9 @@ export default async function RecipePage({
               {tag}
             </span>
           ))}
-        </MotionItem>
-      )}
+          <RecipeChat recipeContext={recipeContext} />
+        </div>
+      </MotionItem>
 
       <MotionItem>
         <div className="my-8 border-t border-border" />
@@ -99,10 +100,6 @@ export default async function RecipePage({
 
       <MotionItem>
         <RecipeBody blocks={recipe.blocks} slug={recipe.slug} />
-      </MotionItem>
-
-      <MotionItem>
-        <RecipeChat recipeContext={recipeContext} />
       </MotionItem>
 
     </MotionPage>

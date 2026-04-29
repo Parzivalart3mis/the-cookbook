@@ -37,8 +37,9 @@ export interface ChatMessage {
 
 export interface ChatRequest {
   message: string;
-  recipeContext: string;    // pre-serialized recipe name + content
+  recipeContext: string;
   history: ChatMessage[];
+  modelOverride?: ModelKey;  // if set, skips auto-routing
 }
 
 export async function POST(req: NextRequest) {
@@ -46,11 +47,11 @@ export async function POST(req: NextRequest) {
   if (!apiKey) return NextResponse.json({ error: 'GROQ_API_KEY not configured' }, { status: 500 });
 
   const body: ChatRequest = await req.json();
-  const { message, recipeContext, history } = body;
+  const { message, recipeContext, history, modelOverride } = body;
 
   if (!message?.trim()) return NextResponse.json({ error: 'Empty message' }, { status: 400 });
 
-  const modelKey = classifyQuery(message);
+  const modelKey: ModelKey = modelOverride ?? classifyQuery(message);
 
   const systemPrompt = `You are a knowledgeable, friendly cooking assistant. The user is reading this recipe:
 

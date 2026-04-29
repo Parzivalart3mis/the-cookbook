@@ -1,17 +1,18 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Sparkles, Send, ChevronDown, Zap, BrainCircuit, Globe, Loader2 } from 'lucide-react';
+import { Sparkles, Send, X, Zap, BrainCircuit, Globe, Loader2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ChatMessage } from '@/app/api/recipe-chat/route';
 
 type ModelKey = 'fast' | 'reasoning' | 'search';
 
-const MODEL_META: Record<ModelKey, { label: string; Icon: React.ElementType; color: string }> = {
-  fast:      { label: 'Fast',      Icon: Zap,         color: 'text-amber-500' },
-  reasoning: { label: 'Thinking',  Icon: BrainCircuit, color: 'text-violet-500' },
-  search:    { label: 'Web',       Icon: Globe,        color: 'text-sky-500' },
-};
+const MODELS: { key: ModelKey | 'auto'; label: string; Icon: React.ElementType; color: string; description: string }[] = [
+  { key: 'auto',      label: 'Auto',     Icon: Sparkles,    color: 'text-accent',       description: 'Picks the best model for your question' },
+  { key: 'fast',      label: 'Fast',     Icon: Zap,         color: 'text-amber-500',    description: '~1000 tok/s · Great for quick questions' },
+  { key: 'reasoning', label: 'Thinking', Icon: BrainCircuit, color: 'text-violet-500',  description: '~500 tok/s · Multi-step analysis' },
+  { key: 'search',    label: 'Web',      Icon: Globe,        color: 'text-sky-500',      description: '~450 tok/s · Live web search' },
+];
 
 interface DisplayMessage extends ChatMessage {
   model?: ModelKey;
@@ -19,21 +20,33 @@ interface DisplayMessage extends ChatMessage {
 
 export default function RecipeChat({ recipeContext }: { recipeContext: string }) {
   const [open, setOpen] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<ModelKey | 'auto'>('auto');
   const [history, setHistory] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [streamingModel, setStreamingModel] = useState<ModelKey>('fast');
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to latest message
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [history]);
 
-  // Focus input when panel opens
   useEffect(() => {
-    if (open) setTimeout(() => inputRef.current?.focus(), 150);
+    if (open) setTimeout(() => inputRef.current?.focus(), 200);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [open]);
+
+  useEffect(() => {
+    document.body.style.overflow = open ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
   }, [open]);
 
   async function send() {
@@ -46,9 +59,8 @@ export default function RecipeChat({ recipeContext }: { recipeContext: string })
     setInput('');
     setStreaming(true);
 
-    // Placeholder assistant message that we'll stream into
     const assistantIdx = nextHistory.length;
-    setHistory((h) => [...h, { role: 'assistant', content: '', model: 'fast' }]);
+    setHistory((h) => [...h, { role: 'assistant', content: '', model: undefined }]);
 
     try {
       const res = await fetch('/api/recipe-chat', {
@@ -57,8 +69,8 @@ export default function RecipeChat({ recipeContext }: { recipeContext: string })
         body: JSON.stringify({
           message: msg,
           recipeContext,
-          // Only send role/content to the API — strip display-only fields
           history: history.map(({ role, content }) => ({ role, content })),
+          modelOverride: selectedModel === 'auto' ? undefined : selectedModel,
         }),
       });
 
@@ -67,7 +79,6 @@ export default function RecipeChat({ recipeContext }: { recipeContext: string })
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-      let detectedModel: ModelKey = 'fast';
 
       while (true) {
         const { done, value } = await reader.read();
@@ -83,33 +94,24 @@ export default function RecipeChat({ recipeContext }: { recipeContext: string })
           if (data === '[DONE]') continue;
           try {
             const parsed = JSON.parse(data);
-            // First chunk is our injected model header
             if (parsed.model) {
-              detectedModel = parsed.model as ModelKey;
-              setStreamingModel(detectedModel);
-              setHistory((h) =>
-                h.map((m, i) => (i === assistantIdx ? { ...m, model: detectedModel } : m))
-              );
+              const m = parsed.model as ModelKey;
+              setStreamingModel(m);
+              setHistory((h) => h.map((msg, i) => i === assistantIdx ? { ...msg, model: m } : msg));
               continue;
             }
             const token = parsed.choices?.[0]?.delta?.content ?? '';
             if (token) {
               setHistory((h) =>
-                h.map((m, i) =>
-                  i === assistantIdx ? { ...m, content: m.content + token } : m
-                )
+                h.map((msg, i) => i === assistantIdx ? { ...msg, content: msg.content + token } : msg)
               );
             }
           } catch {}
         }
       }
-    } catch (err) {
+    } catch {
       setHistory((h) =>
-        h.map((m, i) =>
-          i === assistantIdx
-            ? { ...m, content: 'Something went wrong. Please try again.' }
-            : m
-        )
+        h.map((msg, i) => i === assistantIdx ? { ...msg, content: 'Something went wrong. Please try again.' } : msg)
       );
     } finally {
       setStreaming(false);
@@ -117,48 +119,107 @@ export default function RecipeChat({ recipeContext }: { recipeContext: string })
   }
 
   function handleKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      send();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   }
 
+  const activeModel = MODELS.find((m) => m.key === selectedModel)!;
+
   return (
-    <div className="mt-10 border-t border-border pt-6">
-      {/* Toggle header */}
+    <>
+      {/* Trigger button */}
       <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center justify-between w-full group"
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-2 px-4 py-2 rounded-xl border border-accent/30 bg-accent-light text-accent text-sm font-medium hover:bg-accent hover:text-white hover:border-accent transition-colors duration-150"
       >
-        <div className="flex items-center gap-2 text-ink-muted group-hover:text-accent transition-colors duration-150">
-          <Sparkles size={16} className="text-accent" />
-          <span className="text-sm font-medium">Ask about this recipe</span>
-        </div>
-        <motion.div animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }}>
-          <ChevronDown size={16} className="text-ink-faint" />
-        </motion.div>
+        <Sparkles size={15} />
+        AI Assistant
       </button>
 
+      {/* Modal */}
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-            className="overflow-hidden"
+            ref={overlayRef}
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            onClick={(e) => { if (e.target === overlayRef.current) setOpen(false); }}
           >
-            <div className="pt-4 flex flex-col gap-3">
-              {/* Message history */}
-              {history.length > 0 && (
-                <div className="flex flex-col gap-3 max-h-96 overflow-y-auto pr-1">
-                  {history.map((msg, i) => (
+            {/* Backdrop */}
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+
+            {/* Panel */}
+            <motion.div
+              className="relative z-10 w-full sm:max-w-lg h-[85dvh] sm:h-[70vh] flex flex-col bg-surface rounded-t-2xl sm:rounded-2xl shadow-2xl border border-border overflow-hidden"
+              initial={{ y: '100%', opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: '100%', opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+            >
+              {/* Header */}
+              <div className="shrink-0 px-4 pt-4 pb-3 border-b border-border">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Sparkles size={16} className="text-accent" />
+                    <span className="font-medium text-ink text-sm">AI Assistant</span>
+                  </div>
+                  <button
+                    onClick={() => setOpen(false)}
+                    className="p-1.5 rounded-lg text-ink-faint hover:text-ink hover:bg-surface-hover transition-colors duration-150"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+
+                {/* Model picker */}
+                <div className="flex gap-1.5 flex-wrap">
+                  {MODELS.map(({ key, label, Icon, color }) => (
+                    <button
+                      key={key}
+                      onClick={() => setSelectedModel(key)}
+                      title={MODELS.find(m => m.key === key)?.description}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium transition-colors duration-150 ${
+                        selectedModel === key
+                          ? 'border-accent bg-accent text-white'
+                          : 'border-border text-ink-muted hover:border-accent/50 hover:text-ink'
+                      }`}
+                    >
+                      <Icon size={11} className={selectedModel === key ? 'text-white' : color} />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3">
+                {history.length === 0 ? (
+                  <div className="flex flex-col gap-3 h-full justify-center">
+                    <p className="text-xs text-ink-faint text-center">
+                      Ask anything about this recipe. Try one of these:
+                    </p>
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      {SUGGESTIONS.map((s) => (
+                        <button
+                          key={s}
+                          onClick={() => { setInput(s); inputRef.current?.focus(); }}
+                          className="text-xs border border-border rounded-full px-3 py-1.5 text-ink-muted hover:border-accent/50 hover:text-accent transition-colors duration-150"
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  history.map((msg, i) => (
                     <div
                       key={i}
                       className={`flex flex-col gap-1 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                     >
                       {msg.role === 'assistant' && msg.model && (
-                        <ModelBadge modelKey={msg.model} />
+                        <ModelLabel modelKey={msg.model} />
                       )}
                       <div
                         className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed max-w-[85%] whitespace-pre-wrap ${
@@ -170,72 +231,59 @@ export default function RecipeChat({ recipeContext }: { recipeContext: string })
                         {msg.content || (
                           <span className="flex items-center gap-1.5 text-ink-faint">
                             <Loader2 size={12} className="animate-spin" />
-                            <span className="text-xs">{MODEL_META[streamingModel].label}…</span>
+                            <span className="text-xs">
+                              {MODELS.find(m => m.key === streamingModel)?.label ?? 'Thinking'}…
+                            </span>
                           </span>
                         )}
                       </div>
                     </div>
-                  ))}
-                  <div ref={bottomRef} />
-                </div>
-              )}
-
-              {/* Empty state */}
-              {history.length === 0 && (
-                <div className="flex flex-wrap gap-2 pb-1">
-                  {SUGGESTIONS.map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => { setInput(s); inputRef.current?.focus(); }}
-                      className="text-xs border border-border rounded-full px-3 py-1.5 text-ink-muted hover:border-accent/50 hover:text-accent transition-colors duration-150"
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Input row */}
-              <div className="flex items-end gap-2 border border-border rounded-xl px-3 py-2 focus-within:border-accent/60 transition-colors duration-150 bg-surface-card">
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKey}
-                  placeholder="Ask anything about this recipe…"
-                  rows={1}
-                  disabled={streaming}
-                  className="flex-1 resize-none bg-transparent text-sm text-ink placeholder:text-ink-faint focus:outline-none min-h-[24px] max-h-32 leading-relaxed disabled:opacity-50"
-                  style={{ fieldSizing: 'content' } as React.CSSProperties}
-                />
-                <button
-                  onClick={send}
-                  disabled={!input.trim() || streaming}
-                  className="shrink-0 p-1.5 rounded-lg bg-accent text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-accent-hover transition-colors duration-150"
-                  aria-label="Send"
-                >
-                  {streaming
-                    ? <Loader2 size={14} className="animate-spin" />
-                    : <Send size={14} />
-                  }
-                </button>
+                  ))
+                )}
+                <div ref={bottomRef} />
               </div>
 
-              <p className="text-[0.65rem] text-ink-faint text-center">
-                Shift+Enter for new line · Enter to send
-              </p>
-            </div>
+              {/* Input */}
+              <div className="shrink-0 px-4 py-3 border-t border-border">
+                <div className="flex items-end gap-2 border border-border rounded-xl px-3 py-2 focus-within:border-accent/60 transition-colors duration-150 bg-surface-card">
+                  <textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKey}
+                    placeholder={`Ask ${activeModel.label === 'Auto' ? 'anything' : `${activeModel.label} model`}…`}
+                    rows={1}
+                    disabled={streaming}
+                    className="flex-1 resize-none bg-transparent text-sm text-ink placeholder:text-ink-faint focus:outline-none min-h-[24px] max-h-28 leading-relaxed disabled:opacity-50"
+                    style={{ fieldSizing: 'content' } as React.CSSProperties}
+                  />
+                  <button
+                    onClick={send}
+                    disabled={!input.trim() || streaming}
+                    className="shrink-0 p-1.5 rounded-lg bg-accent text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-accent-hover transition-colors duration-150"
+                    aria-label="Send"
+                  >
+                    {streaming ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                  </button>
+                </div>
+                <p className="text-[0.6rem] text-ink-faint text-center mt-1.5">
+                  Shift+Enter for new line · Enter to send
+                </p>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </>
   );
 }
 
-function ModelBadge({ modelKey }: { modelKey: ModelKey }) {
-  const { label, Icon, color } = MODEL_META[modelKey];
+function ModelLabel({ modelKey }: { modelKey: ModelKey }) {
+  const meta = MODELS.find((m) => m.key === modelKey);
+  if (!meta) return null;
+  const { label, Icon, color } = meta;
   return (
-    <span className={`flex items-center gap-1 text-[0.6rem] font-medium ${color} uppercase tracking-wide`}>
+    <span className={`flex items-center gap-1 text-[0.6rem] font-medium uppercase tracking-wide ${color}`}>
       <Icon size={9} />
       {label}
     </span>
@@ -247,4 +295,5 @@ const SUGGESTIONS = [
   'Can I make this ahead of time?',
   'How do I know when it\'s done?',
   'Make this dairy-free',
+  'What wine pairs with this?',
 ];
