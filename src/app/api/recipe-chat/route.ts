@@ -3,11 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 const GROQ_BASE = 'https://api.groq.com/openai/v1';
 
 const MODELS = {
-  // Fast everyday chat — substitutions, timing, simple tips
   fast:      'openai/gpt-oss-20b',
-  // Multi-step reasoning — dietary analysis, technique explanations, tradeoffs
   reasoning: 'openai/gpt-oss-120b',
-  // Live web search — recent research, external info, links
   search:    'groq/compound',
 } as const;
 
@@ -39,19 +36,27 @@ export interface ChatRequest {
   message: string;
   recipeContext: string;
   history: ChatMessage[];
-  modelOverride?: ModelKey;  // if set, skips auto-routing
+  modelOverride?: ModelKey;
 }
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: 'GROQ_API_KEY not configured' }, { status: 500 });
+  if (!apiKey) {
+    return NextResponse.json({ error: 'GROQ_API_KEY not configured' }, { status: 500 });
+  }
 
-  const body: ChatRequest = await req.json();
+  let body: ChatRequest;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+
   const { message, recipeContext, history, modelOverride } = body;
-
   if (!message?.trim()) return NextResponse.json({ error: 'Empty message' }, { status: 400 });
 
   const modelKey: ModelKey = modelOverride ?? classifyQuery(message);
+  const modelId = MODELS[modelKey];
 
   const systemPrompt = `You are a knowledgeable, friendly cooking assistant. The user is reading this recipe:
 
@@ -59,7 +64,7 @@ export async function POST(req: NextRequest) {
 ${recipeContext}
 ---
 
-Answer their questions concisely and practically. Focus on actionable advice. If asked about substitutions, give exact amounts. If something can go wrong, warn them briefly. Keep responses under 200 words unless the question genuinely requires more detail.`;
+Answer their questions concisely and practically. Focus on actionable advice. If asked about substitutions, give exact amounts. Keep responses under 200 words unless the question genuinely requires more detail.`;
 
   const messages = [
     { role: 'system', content: systemPrompt },
@@ -67,45 +72,57 @@ Answer their questions concisely and practically. Focus on actionable advice. If
     { role: 'user', content: message },
   ];
 
-  const groqRes = await fetch(`${GROQ_BASE}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: MODELS[modelKey],
-      messages,
-      stream: true,
-      temperature: 0.7,
-      max_tokens: 512,
-    }),
-  });
-
-  if (!groqRes.ok) {
-    const err = await groqRes.text();
-    return NextResponse.json({ error: err }, { status: groqRes.status });
+  let groqRes: Response;
+  try {
+    groqRes = await fetch(`${GROQ_BASE}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: modelId,
+        messages,
+        stream: true,
+        temperature: 0.7,
+        max_tokens: 8192,
+      }),
+    });
+  } catch (err) {
+    console.error('[recipe-chat] Groq fetch failed:', err);
+    return NextResponse.json({ error: 'Failed to reach Groq' }, { status: 502 });
   }
 
-  // Proxy the SSE stream and inject model info as first chunk
+  if (!groqRes.ok) {
+    const errText = await groqRes.text();
+    console.error('[recipe-chat] Groq error:', groqRes.status, errText);
+    return NextResponse.json({ error: errText }, { status: groqRes.status });
+  }
+
+  const encoder = new TextEncoder();
+  // Inject model key as first SSE event so the client can show the badge
   const modelHeader = `data: ${JSON.stringify({ model: modelKey })}\n\n`;
 
-  const { readable, writable } = new TransformStream();
-  const writer = writable.getWriter();
-  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        controller.enqueue(encoder.encode(modelHeader));
+        const reader = groqRes.body!.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          controller.enqueue(value);
+        }
+      } catch (err) {
+        console.error('[recipe-chat] Stream error:', err);
+        controller.error(err);
+      } finally {
+        controller.close();
+      }
+    },
+  });
 
-  (async () => {
-    await writer.write(encoder.encode(modelHeader));
-    const reader = groqRes.body!.getReader();
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      await writer.write(value);
-    }
-    await writer.close();
-  })();
-
-  return new Response(readable, {
+  return new Response(stream, {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
