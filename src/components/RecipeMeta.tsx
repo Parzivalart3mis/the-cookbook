@@ -1,5 +1,6 @@
 import React from 'react';
-import { ExternalLink, UtensilsCrossed, Clock, Timer } from 'lucide-react';
+import { UtensilsCrossed, Clock, Timer } from 'lucide-react';
+import SourcePreview from './SourcePreview';
 
 interface RecipeMetaProps {
   servings: number | null;
@@ -56,18 +57,7 @@ export default function RecipeMeta({
   }
 
   if (source) {
-    items.push(
-      <a
-        key="source"
-        href={source}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center gap-1 hover:text-accent transition-colors duration-150"
-      >
-        Source
-        <ExternalLink size={12} />
-      </a>
-    );
+    items.push(<SourcePreview key="source" url={source} />);
   }
 
   if (children) {

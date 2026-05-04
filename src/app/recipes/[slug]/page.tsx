@@ -6,6 +6,8 @@ import { MotionPage, MotionItem, BackLink } from '@/components/DetailMotion';
 import NutritionModal from '@/components/NutritionModal';
 import ReadingProgress from '@/components/ReadingProgress';
 import RecipeBody from '@/components/RecipeBody';
+import RecipeActions from '@/components/RecipeActions';
+import RecipeNotes from '@/components/RecipeNotes';
 
 export const revalidate = 60;
 
@@ -74,11 +76,25 @@ export default async function RecipePage({
       )}
 
       <MotionItem>
+        <RecipeActions
+          blocks={recipe.blocks}
+          slug={recipe.slug}
+          name={recipe.name}
+          prepTime={recipe.prepTime}
+          cookTime={recipe.cookTime}
+        />
+      </MotionItem>
+
+      <MotionItem>
         <div className="my-8 border-t border-border" />
       </MotionItem>
 
       <MotionItem>
         <RecipeBody blocks={recipe.blocks} slug={recipe.slug} />
+      </MotionItem>
+
+      <MotionItem>
+        <RecipeNotes slug={recipe.slug} />
       </MotionItem>
 
     </MotionPage>

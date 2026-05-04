@@ -62,6 +62,7 @@ export interface RecipeSummary {
   id: string;
   slug: string;
   name: string;
+  createdAt: string;        // ISO date from page.created_time
   servings: number | null;
   prepTime: number | null;  // minutes
   cookTime: number | null;  // minutes
@@ -132,6 +133,7 @@ export async function getAllRecipes(): Promise<RecipeSummary[]> {
           .map((t) => t.plain_text)
           .join('') || 'Untitled'
       ),
+      createdAt: page.created_time,
       ...parseProps(props),
     };
   });

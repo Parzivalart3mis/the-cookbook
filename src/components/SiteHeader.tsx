@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ChefHat } from 'lucide-react';
+import { ChefHat, ShoppingCart, CalendarDays } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
 
 export default function SiteHeader() {
@@ -13,7 +13,24 @@ export default function SiteHeader() {
           <ChefHat size={22} className="text-accent shrink-0" />
           The Cookbook
         </Link>
-        <ThemeToggle />
+
+        <div className="flex items-center gap-1">
+          <Link
+            href="/timeline"
+            title="Timeline"
+            className="p-2 rounded-lg text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors duration-150"
+          >
+            <CalendarDays size={18} />
+          </Link>
+          <Link
+            href="/shopping-list"
+            title="Shopping List"
+            className="p-2 rounded-lg text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors duration-150"
+          >
+            <ShoppingCart size={18} />
+          </Link>
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );

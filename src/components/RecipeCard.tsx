@@ -2,8 +2,10 @@
 
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Clock } from 'lucide-react';
+import { Clock, BookmarkPlus, BookmarkCheck } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import type { RecipeSummary } from '@/lib/notion';
+import { addToQueue, removeFromQueue, isInQueue } from './MealQueueShelf';
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -26,6 +28,27 @@ export default function RecipeCard({
       ? recipe.prepTime + recipe.cookTime
       : recipe.prepTime ?? recipe.cookTime ?? null;
 
+  const [inQueue, setInQueue] = useState(false);
+
+  // Read queue state after mount (SSR-safe)
+  useEffect(() => {
+    setInQueue(isInQueue(recipe.slug));
+    const sync = () => setInQueue(isInQueue(recipe.slug));
+    window.addEventListener('cookbook-queue-change', sync);
+    return () => window.removeEventListener('cookbook-queue-change', sync);
+  }, [recipe.slug]);
+
+  function handleQueue(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (inQueue) {
+      removeFromQueue(recipe.slug);
+    } else {
+      addToQueue({ slug: recipe.slug, name: recipe.name, prepTime: recipe.prepTime, cookTime: recipe.cookTime });
+    }
+    setInQueue(q => !q);
+  }
+
   return (
     <motion.div
       layout
@@ -34,49 +57,64 @@ export default function RecipeCard({
       exit={{ opacity: 0, scale: 0.94, transition: { duration: 0.15, ease: 'easeIn' } }}
       transition={{ duration: 0.4, delay: index * 0.055, ease }}
     >
-      <Link href={`/recipes/${recipe.slug}`} className="group block h-full">
-        <motion.article
-          whileHover={{ y: -6, scale: 1.018 }}
-          whileTap={{ scale: 0.97 }}
-          transition={{ duration: 0.22, ease: 'easeOut' }}
-          className="h-full rounded-xl border border-border bg-surface-card p-5 shadow-card group-hover:shadow-card-hover group-hover:border-accent/30 transition-[border-color,box-shadow] duration-200"
-        >
-          <h2 className="font-display text-lg font-semibold leading-snug text-ink group-hover:text-accent transition-colors duration-150 mb-3">
-            {recipe.name}
-          </h2>
+      <div className="relative h-full">
+        <Link href={`/recipes/${recipe.slug}`} className="group block h-full">
+          <motion.article
+            whileHover={{ y: -6, scale: 1.018 }}
+            whileTap={{ scale: 0.97 }}
+            transition={{ duration: 0.22, ease: 'easeOut' }}
+            className="h-full rounded-xl border border-border bg-surface-card p-5 shadow-card group-hover:shadow-card-hover group-hover:border-accent/30 transition-[border-color,box-shadow] duration-200"
+          >
+            <h2 className="font-display text-lg font-semibold leading-snug text-ink group-hover:text-accent transition-colors duration-150 mb-3 pr-6">
+              {recipe.name}
+            </h2>
 
-          <div className="flex items-center justify-between gap-3 mt-auto flex-wrap">
-            <div className="flex items-center gap-3">
-              {recipe.servings !== null && (
-                <span className="text-xs text-ink-muted tabular-nums">
-                  {recipe.servings} {recipe.servings === 1 ? 'serving' : 'servings'}
-                </span>
-              )}
-              {totalTime !== null && (
-                <span className="flex items-center gap-1 text-xs text-ink-muted tabular-nums">
-                  <Clock size={11} className="text-accent" />
-                  {formatTime(totalTime)}
-                </span>
+            <div className="flex items-center justify-between gap-3 mt-auto flex-wrap">
+              <div className="flex items-center gap-3">
+                {recipe.servings !== null && (
+                  <span className="text-xs text-ink-muted tabular-nums">
+                    {recipe.servings} {recipe.servings === 1 ? 'serving' : 'servings'}
+                  </span>
+                )}
+                {totalTime !== null && (
+                  <span className="flex items-center gap-1 text-xs text-ink-muted tabular-nums">
+                    <Clock size={11} className="text-accent" />
+                    {formatTime(totalTime)}
+                  </span>
+                )}
+              </div>
+
+              {recipe.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 ml-auto">
+                  {recipe.tags.map((tag) => (
+                    <motion.span
+                      key={tag}
+                      whileHover={{ scale: 1.1 }}
+                      transition={{ duration: 0.15 }}
+                      className="inline-block cursor-default rounded-full bg-tag-bg px-2.5 py-0.5 text-xs font-medium text-tag-text"
+                    >
+                      {tag}
+                    </motion.span>
+                  ))}
+                </div>
               )}
             </div>
+          </motion.article>
+        </Link>
 
-            {recipe.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 ml-auto">
-                {recipe.tags.map((tag) => (
-                  <motion.span
-                    key={tag}
-                    whileHover={{ scale: 1.1 }}
-                    transition={{ duration: 0.15 }}
-                    className="inline-block cursor-default rounded-full bg-tag-bg px-2.5 py-0.5 text-xs font-medium text-tag-text"
-                  >
-                    {tag}
-                  </motion.span>
-                ))}
-              </div>
-            )}
-          </div>
-        </motion.article>
-      </Link>
+        {/* Queue button — outside Link to avoid navigation on click */}
+        <button
+          onClick={handleQueue}
+          title={inQueue ? 'Remove from queue' : 'Add to this week'}
+          className={`absolute top-3 right-3 z-10 p-1.5 rounded-lg border transition-colors duration-150 ${
+            inQueue
+              ? 'border-accent/50 bg-accent-light text-accent'
+              : 'border-border bg-surface-card text-ink-faint hover:border-accent/30 hover:text-accent'
+          }`}
+        >
+          {inQueue ? <BookmarkCheck size={13} /> : <BookmarkPlus size={13} />}
+        </button>
+      </div>
     </motion.div>
   );
 }
