@@ -83,7 +83,19 @@ export default function RecipeBody({
     if (!storageKey) return;
     try {
       const raw = localStorage.getItem(storageKey);
-      if (raw) setChecked(new Set(JSON.parse(raw)));
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      // Support both legacy plain-array format and new { ids, savedAt } format
+      if (Array.isArray(parsed)) {
+        setChecked(new Set(parsed));
+      } else if (parsed && typeof parsed === 'object') {
+        const age = Date.now() - (parsed.savedAt ?? 0);
+        if (age < 24 * 60 * 60 * 1000) {
+          setChecked(new Set(parsed.ids ?? []));
+        } else {
+          localStorage.removeItem(storageKey);
+        }
+      }
     } catch {}
   }, [storageKey]);
 
@@ -93,7 +105,7 @@ export default function RecipeBody({
       if (next.has(id)) next.delete(id);
       else next.add(id);
       if (storageKey) {
-        try { localStorage.setItem(storageKey, JSON.stringify([...next])); } catch {}
+        try { localStorage.setItem(storageKey, JSON.stringify({ ids: [...next], savedAt: Date.now() })); } catch {}
       }
       return next;
     });

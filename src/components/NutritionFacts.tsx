@@ -17,7 +17,7 @@ function pdv(value: number, dv: number) {
   return `${Math.round((value / dv) * 100)}%`;
 }
 
-// A single nutrient row. Always renders — shows "NaN" when value is null.
+// A single nutrient row. Always renders — shows "—" when value is null.
 function Row({
   name,
   value,
@@ -33,9 +33,9 @@ function Row({
   indent?: 0 | 1 | 2; // 0 = flush, 1 = one level, 2 = two levels
   bold?: boolean;
 }) {
-  const isNaN = value === null;
-  const displayAmt = isNaN ? 'NaN' : `${value}${unit}`;
-  const displayPdv = !isNaN && dv !== undefined ? pdv(value!, dv) : null;
+  const isNull = value === null;
+  const displayAmt = isNull ? '—' : `${value}${unit}`;
+  const displayPdv = !isNull && dv !== undefined ? pdv(value!, dv) : null;
 
   const pl = indent === 2 ? 'pl-10' : indent === 1 ? 'pl-6' : '';
 
@@ -45,7 +45,7 @@ function Row({
     >
       <span>
         <span className={bold ? 'font-bold' : 'font-normal'}>{name}</span>{' '}
-        <span className={`font-normal ${isNaN ? 'text-gray-400' : ''}`}>
+        <span className={`font-normal ${isNull ? 'text-gray-400' : ''}`}>
           {displayAmt}
         </span>
       </span>
@@ -60,7 +60,7 @@ function Row({
 function Micro({ name, value }: { name: string; value: number | null }) {
   return (
     <span>
-      {name} {value !== null ? `${value}%` : <span className="text-gray-400">NaN</span>}
+      {name} {value !== null ? `${value}%` : <span className="text-gray-400">—</span>}
     </span>
   );
 }
@@ -102,7 +102,7 @@ export default function NutritionFacts({
             className={`font-black leading-none tabular-nums ${nutrition.calories === null ? 'text-gray-400 text-3xl' : ''}`}
             style={nutrition.calories !== null ? { fontSize: '2.75rem' } : undefined}
           >
-            {nutrition.calories ?? 'NaN'}
+            {nutrition.calories ?? '—'}
           </span>
         </div>
       </div>

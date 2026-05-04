@@ -89,9 +89,9 @@ function FilterDropdown({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function RecipeSearch({ recipes }: { recipes: RecipeSummary[] }) {
+export default function RecipeSearch({ recipes, initialTag }: { recipes: RecipeSummary[]; initialTag?: string }) {
   const [query, setQuery]               = useState('');
-  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(initialTag ? new Set([initialTag]) : new Set());
   const [servingBucket, setServingBucket] = useState<string | null>(null);
   const [openDropdown, setOpenDropdown] = useState<'tags' | 'serves' | null>(null);
 
@@ -110,16 +110,19 @@ export default function RecipeSearch({ recipes }: { recipes: RecipeSummary[] }) 
     let result = recipes;
 
     const q = query.trim().toLowerCase();
-    if (q) result = result.filter((r) => r.name.toLowerCase().includes(q));
+    if (q) result = result.filter((r) =>
+      r.name.toLowerCase().includes(q) ||
+      r.tags.some((t) => t.toLowerCase().includes(q))
+    );
 
     // Tags: AND logic — recipe must have every selected tag
     if (selectedTags.size > 0)
       result = result.filter((r) => [...selectedTags].every((t) => r.tags.includes(t)));
 
-    // Servings bucket
+    // Servings bucket — recipes with null servings are kept visible
     if (servingBucket) {
       const bucket = SERVING_BUCKETS.find((b) => b.label === servingBucket);
-      if (bucket) result = result.filter((r) => r.servings !== null && bucket.test(r.servings));
+      if (bucket) result = result.filter((r) => r.servings === null || bucket.test(r.servings));
     }
 
     return result;

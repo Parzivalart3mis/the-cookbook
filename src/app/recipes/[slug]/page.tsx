@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import Link from 'next/link';
 import { getAllRecipes, getRecipeBySlug } from '@/lib/notion';
 import RecipeMeta from '@/components/RecipeMeta';
 import { MotionPage, MotionItem, BackLink } from '@/components/DetailMotion';
@@ -60,12 +61,13 @@ export default async function RecipePage({
         <MotionItem>
           <div className="flex flex-wrap gap-2 mt-3">
             {recipe.tags.map((tag) => (
-              <span
+              <Link
                 key={tag}
-                className="inline-block rounded-full bg-tag-bg px-3 py-1 text-xs font-medium text-tag-text"
+                href={`/?tag=${encodeURIComponent(tag)}`}
+                className="inline-block rounded-full bg-tag-bg px-3 py-1 text-xs font-medium text-tag-text hover:bg-accent hover:text-white transition-colors duration-150"
               >
                 {tag}
-              </span>
+              </Link>
             ))}
           </div>
         </MotionItem>

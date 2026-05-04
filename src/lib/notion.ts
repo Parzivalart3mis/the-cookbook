@@ -118,16 +118,10 @@ function parseProps(props: Props): Pick<RecipeSummary, 'name' | 'servings' | 'pr
 }
 
 export async function getAllRecipes(): Promise<RecipeSummary[]> {
-  let response;
-  try {
-    response = await queryDatabase({
-      database_id: DATABASE_ID,
-      sorts: [{ property: 'Name', direction: 'ascending' }],
-    });
-  } catch (err) {
-    console.warn('[notion] getAllRecipes failed — is the integration connected?', err);
-    return [];
-  }
+  const response = await queryDatabase({
+    database_id: DATABASE_ID,
+    sorts: [{ property: 'Name', direction: 'ascending' }],
+  });
 
   return response.results.map((page) => {
     const props = page.properties as Props;

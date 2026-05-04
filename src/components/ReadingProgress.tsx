@@ -19,8 +19,8 @@ export default function ReadingProgress() {
 
   return (
     <div
-      className="fixed top-0 left-0 z-50 h-[3px] bg-accent"
-      style={{ width: `${progress * 100}%` }}
+      className="fixed top-0 left-0 z-50 h-[3px] w-full bg-accent"
+      style={{ transform: `scaleX(${progress})`, transformOrigin: 'left center', willChange: 'transform' }}
     />
   );
 }
