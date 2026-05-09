@@ -50,9 +50,16 @@ export default function MealQueueShelf() {
     return () => window.removeEventListener('cookbook-queue-change', refresh);
   }, []);
 
-  if (queue.length === 0) return null;
-
   const totalMin = queue.reduce((t, i) => t + (i.prepTime ?? 0) + (i.cookTime ?? 0), 0);
+
+  if (queue.length === 0) {
+    return (
+      <div className="mb-6 rounded-xl border border-dashed border-border bg-surface-card px-4 py-3 text-sm text-ink-faint flex items-center gap-2">
+        <CalendarDays size={14} className="text-ink-faint shrink-0" />
+        <span>Bookmark recipes to build your week&apos;s meal plan.</span>
+      </div>
+    );
+  }
 
   return (
     <div className="mb-6 rounded-xl border border-border bg-surface-card overflow-hidden">

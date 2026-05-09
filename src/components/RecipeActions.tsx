@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { UtensilsCrossed, Bookmark, BookmarkCheck, ShoppingCart, Check } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import type { BlockObjectResponse } from '@notionhq/client/build/src/api-endpoints';
@@ -47,7 +48,7 @@ export default function RecipeActions({
 }) {
   const [cookModeOpen, setCookModeOpen] = useState(false);
   const [inQueue, setInQueue] = useState(() => isInQueue(slug));
-  const [shoppingDone, setShoppingDone] = useState(false);
+  const [shoppingDone, setShoppingDone] = useState<number | false>(false);
 
   function toggleQueue() {
     if (inQueue) {
@@ -63,9 +64,9 @@ export default function RecipeActions({
     const seen = new Set(existing.map(i => i.text.toLowerCase()));
     const newItems: ShoppingItem[] = [];
     for (const block of blocks) {
-      if (block.type !== 'bulleted_list_item') continue;
+      if (block.type !== 'bulleted_list_item' && block.type !== 'numbered_list_item') continue;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rich = (block as any).bulleted_list_item?.rich_text ?? [];
+      const rich = (block as any)[block.type]?.rich_text ?? [];
       const text = rich.map((r: { plain_text: string }) => r.plain_text).join('').trim();
       if (!text || seen.has(text.toLowerCase())) continue;
       newItems.push({
@@ -77,8 +78,8 @@ export default function RecipeActions({
       });
     }
     sSet('cookbook-shopping', [...existing, ...newItems]);
-    setShoppingDone(true);
-    setTimeout(() => setShoppingDone(false), 2500);
+    setShoppingDone(newItems.length);
+    setTimeout(() => setShoppingDone(false), 3000);
   }
 
   return (
@@ -104,17 +105,23 @@ export default function RecipeActions({
           {inQueue ? 'In Queue' : 'Add to Queue'}
         </button>
 
-        <button
-          onClick={addShopping}
-          className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition-colors duration-150 ${
-            shoppingDone
-              ? 'border-green-500/50 text-green-600'
-              : 'border-border text-ink-muted hover:border-accent/30 hover:text-ink'
-          }`}
-        >
-          {shoppingDone ? <Check size={14} /> : <ShoppingCart size={14} />}
-          {shoppingDone ? 'Added!' : 'Shopping List'}
-        </button>
+        {shoppingDone !== false ? (
+          <Link
+            href="/shopping-list"
+            className="flex items-center gap-1.5 rounded-xl border border-green-500/50 bg-green-500/10 px-3 py-2 text-sm font-medium text-green-600 transition-colors duration-150 hover:bg-green-500/20"
+          >
+            <Check size={14} />
+            {shoppingDone > 0 ? `Added ${shoppingDone} item${shoppingDone !== 1 ? 's' : ''} · View list` : 'Already in list'}
+          </Link>
+        ) : (
+          <button
+            onClick={addShopping}
+            className="flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium text-ink-muted transition-colors duration-150 hover:border-accent/30 hover:text-ink"
+          >
+            <ShoppingCart size={14} />
+            Shopping List
+          </button>
+        )}
       </div>
 
       <AnimatePresence>

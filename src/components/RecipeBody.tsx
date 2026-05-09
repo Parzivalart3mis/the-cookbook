@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { RotateCcw } from 'lucide-react';
+import { RotateCcw, Check } from 'lucide-react';
 import type { BlockObjectResponse } from '@notionhq/client/build/src/api-endpoints';
 
 type RichTextItem = {
@@ -34,8 +34,9 @@ function prettyNum(n: number): string {
 
 function scaleText(text: string, factor: number): string {
   if (factor === 1) return text;
-  // Match fractions (1/2), decimals (1.5), integers (2). Skip temperatures (°).
-  return text.replace(/\b(\d+(?:\/\d+|\.\d+)?)\b(?!\s*°)/g, (match, numStr: string) => {
+  // Match fractions (1/2), decimals (1.5), integers (2).
+  // Skip temperatures (°), quoted dimensions ("), and measurement words (inch, cm, mm).
+  return text.replace(/\b(\d+(?:\/\d+|\.\d+)?)(?!\d)(?!\s*(?:°|"|inch|cm|mm))/gi, (match, numStr: string) => {
     let val: number;
     if (numStr.includes('/')) {
       const [a, b] = numStr.split('/').map(Number);
@@ -151,6 +152,22 @@ export default function RecipeBody({
     } catch {}
   }, [storageKey]);
 
+  // Cache ingredient text for pantry matching in RecipeSearch
+  useEffect(() => {
+    if (!slug) return;
+    const ingredients = blocks
+      .filter(b => b.type === 'bulleted_list_item')
+      .map(b => getBlockRichText(b).map(r => r.plain_text).join('').trim())
+      .filter(Boolean);
+    if (ingredients.length === 0) return;
+    try {
+      const raw = localStorage.getItem('cookbook-ingredients-index');
+      const index: Record<string, string[]> = raw ? JSON.parse(raw) : {};
+      index[slug] = ingredients;
+      localStorage.setItem('cookbook-ingredients-index', JSON.stringify(index));
+    } catch {}
+  }, [slug, blocks]);
+
   function toggle(id: string) {
     setChecked((prev) => {
       const next = new Set(prev);
@@ -211,11 +228,38 @@ export default function RecipeBody({
       <div className="prose prose-neutral max-w-none dark:prose-invert">
         {groups.map((group, i) => {
           if ('kind' in group) {
-            const Tag = group.kind === 'bulleted_list_item' ? 'ul' : 'ol';
-            // Only scale bulleted lists (ingredients), not numbered (steps)
-            const listScale = group.kind === 'bulleted_list_item' ? scale : 1;
+            // Bulleted lists (ingredients): custom checkbox UI with visible indicators
+            if (group.kind === 'bulleted_list_item') {
+              return (
+                <div key={i} className="not-prose my-4 flex flex-col gap-2">
+                  {group.items.map((item) => {
+                    const isChecked = checked.has(item.id);
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => toggle(item.id)}
+                        className="flex items-start gap-2.5 cursor-pointer select-none group"
+                      >
+                        <span className={`mt-[2px] flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border-2 transition-all duration-150 ${
+                          isChecked ? 'border-accent bg-accent' : 'border-border group-hover:border-accent/60'
+                        }`}>
+                          {isChecked && <Check size={11} className="text-white" strokeWidth={3} />}
+                        </span>
+                        <span className={`text-sm leading-relaxed transition-all duration-200 ${
+                          isChecked ? 'line-through opacity-40 text-ink-muted' : 'text-ink'
+                        }`}>
+                          {renderRichText(getBlockRichText(item), { scale })}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            }
+
+            // Numbered lists (steps): keep prose styling, still clickable
             return (
-              <Tag key={i}>
+              <ol key={i}>
                 {group.items.map((item) => {
                   const isChecked = checked.has(item.id);
                   return (
@@ -226,12 +270,12 @@ export default function RecipeBody({
                       style={{ opacity: isChecked ? 0.35 : 1 }}
                     >
                       <span className={isChecked ? 'line-through' : ''}>
-                        {renderRichText(getBlockRichText(item), { scale: listScale })}
+                        {renderRichText(getBlockRichText(item))}
                       </span>
                     </li>
                   );
                 })}
-              </Tag>
+              </ol>
             );
           }
 

@@ -101,14 +101,17 @@ export default function RecipeSearch({
   const [pantryInput, setPantryInput] = useState('');
   const [pantryItems, setPantryItems] = useState<string[]>([]);
   const [activeCollection, setActiveCollection] = useState<string | null>(initialTag ?? null);
+  const [ingredientIndex, setIngredientIndex] = useState<Record<string, string[]>>({});
 
-  // Load pantry from localStorage on mount
+  // Load pantry and ingredient index from localStorage on mount
   useEffect(() => {
     const stored = sGet<string[]>('cookbook-pantry');
     if (stored?.length) {
       setPantryItems(stored);
       setPantryInput(stored.join(', '));
     }
+    const index = sGet<Record<string, string[]>>('cookbook-ingredients-index') ?? {};
+    setIngredientIndex(index);
   }, []);
 
   const allTags = useMemo(() => {
@@ -155,13 +158,16 @@ export default function RecipeSearch({
 
     if (pantryItems.length > 0) {
       result = result.filter(r => {
-        const haystack = [r.name, ...r.tags].join(' ').toLowerCase();
+        const indexed = ingredientIndex[r.slug];
+        const haystack = indexed
+          ? indexed.join(' ').toLowerCase()
+          : [r.name, ...r.tags].join(' ').toLowerCase();
         return pantryItems.some(item => item.trim() && haystack.includes(item.trim().toLowerCase()));
       });
     }
 
     return result;
-  }, [recipes, query, selectedTags, servingBucket, nutritionFilter, pantryItems]);
+  }, [recipes, query, selectedTags, servingBucket, nutritionFilter, pantryItems, ingredientIndex]);
 
   function toggleTag(tag: string) {
     setActiveCollection(null);
@@ -409,6 +415,11 @@ export default function RecipeSearch({
                 onChange={e => handlePantryChange(e.target.value)}
                 className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-colors"
               />
+              <p className="text-xs text-ink-faint mt-2">
+                {Object.keys(ingredientIndex).length > 0
+                  ? `${Object.keys(ingredientIndex).length}/${recipes.length} recipes indexed — visit more to improve matches.`
+                  : 'Visit recipe pages to index ingredients for better matching.'}
+              </p>
             </div>
           </motion.div>
         )}
