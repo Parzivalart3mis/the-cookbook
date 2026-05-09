@@ -1,11 +1,10 @@
 'use client';
 
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { Search, X, ChefHat, ChevronDown, Check, Leaf } from 'lucide-react';
+import { Search, X, ChefHat, ChevronDown, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { RecipeSummary, Nutrition } from '@/lib/notion';
 import { cn } from '@/lib/cn';
-import { sGet, sSet } from '@/lib/storage';
 import RecipeGrid from './RecipeGrid';
 import CollectionShelf from './CollectionShelf';
 import MealQueueShelf from './MealQueueShelf';
@@ -97,22 +96,7 @@ export default function RecipeSearch({
   const [servingBucket, setServingBucket] = useState<string | null>(null);
   const [nutritionFilter, setNutritionFilter] = useState<string | null>(null);
   const [openDropdown, setOpenDropdown] = useState<'tags' | 'serves' | 'nutrition' | null>(null);
-  const [pantryOpen, setPantryOpen]   = useState(false);
-  const [pantryInput, setPantryInput] = useState('');
-  const [pantryItems, setPantryItems] = useState<string[]>([]);
   const [activeCollection, setActiveCollection] = useState<string | null>(initialTag ?? null);
-  const [ingredientIndex, setIngredientIndex] = useState<Record<string, string[]>>({});
-
-  // Load pantry and ingredient index from localStorage on mount
-  useEffect(() => {
-    const stored = sGet<string[]>('cookbook-pantry');
-    if (stored?.length) {
-      setPantryItems(stored);
-      setPantryInput(stored.join(', '));
-    }
-    const index = sGet<Record<string, string[]>>('cookbook-ingredients-index') ?? {};
-    setIngredientIndex(index);
-  }, []);
 
   const allTags = useMemo(() => {
     const tags = new Set<string>();
@@ -131,7 +115,7 @@ export default function RecipeSearch({
 
   const showServings    = recipes.some(r => r.servings !== null);
   const hasNutrition    = recipes.some(r => Object.values(r.nutrition).some(v => v !== null));
-  const hasActiveFilters = selectedTags.size > 0 || servingBucket !== null || nutritionFilter !== null || pantryItems.length > 0;
+  const hasActiveFilters = selectedTags.size > 0 || servingBucket !== null || nutritionFilter !== null;
   const hasQuery        = query.trim().length > 0;
 
   const filtered = useMemo(() => {
@@ -156,18 +140,8 @@ export default function RecipeSearch({
       if (preset) result = result.filter(r => preset.test(r.nutrition));
     }
 
-    if (pantryItems.length > 0) {
-      result = result.filter(r => {
-        const indexed = ingredientIndex[r.slug];
-        const haystack = indexed
-          ? indexed.join(' ').toLowerCase()
-          : [r.name, ...r.tags].join(' ').toLowerCase();
-        return pantryItems.some(item => item.trim() && haystack.includes(item.trim().toLowerCase()));
-      });
-    }
-
     return result;
-  }, [recipes, query, selectedTags, servingBucket, nutritionFilter, pantryItems, ingredientIndex]);
+  }, [recipes, query, selectedTags, servingBucket, nutritionFilter]);
 
   function toggleTag(tag: string) {
     setActiveCollection(null);
@@ -187,17 +161,7 @@ export default function RecipeSearch({
     setSelectedTags(new Set());
     setServingBucket(null);
     setNutritionFilter(null);
-    setPantryItems([]);
-    setPantryInput('');
     setActiveCollection(null);
-    sSet('cookbook-pantry', []);
-  }
-
-  function handlePantryChange(val: string) {
-    setPantryInput(val);
-    const items = val.split(',').map(s => s.trim()).filter(Boolean);
-    setPantryItems(items);
-    sSet('cookbook-pantry', items);
   }
 
   const closeDropdown = useCallback(() => setOpenDropdown(null), []);
@@ -346,25 +310,6 @@ export default function RecipeSearch({
           </FilterDropdown>
         )}
 
-        {/* Pantry toggle */}
-        <button
-          onClick={() => setPantryOpen(o => !o)}
-          className={cn(
-            'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors duration-150',
-            pantryOpen || pantryItems.length > 0
-              ? 'border-accent/50 bg-accent-light text-accent'
-              : 'border-border bg-surface-card text-ink-muted hover:border-accent/30 hover:text-ink'
-          )}
-        >
-          <Leaf size={13} />
-          Pantry
-          {pantryItems.length > 0 && (
-            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[10px] font-semibold text-white">
-              {pantryItems.length}
-            </span>
-          )}
-        </button>
-
         {/* Active summary + clear */}
         <AnimatePresence>
           {hasActiveFilters && (
@@ -389,41 +334,6 @@ export default function RecipeSearch({
           )}
         </AnimatePresence>
       </motion.div>
-
-      {/* Pantry drawer */}
-      <AnimatePresence>
-        {pantryOpen && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden mb-6"
-          >
-            <div className="rounded-xl border border-border bg-surface-card p-4">
-              <p className="text-sm font-semibold text-ink mb-1 flex items-center gap-1.5">
-                <Leaf size={13} className="text-accent" />
-                What&apos;s in your pantry?
-              </p>
-              <p className="text-xs text-ink-muted mb-3">
-                Comma-separated ingredients. Recipes matching any of them will show up.
-              </p>
-              <input
-                type="text"
-                placeholder="chicken, pasta, garlic, olive oil…"
-                value={pantryInput}
-                onChange={e => handlePantryChange(e.target.value)}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-colors"
-              />
-              <p className="text-xs text-ink-faint mt-2">
-                {Object.keys(ingredientIndex).length > 0
-                  ? `${Object.keys(ingredientIndex).length}/${recipes.length} recipes indexed — visit more to improve matches.`
-                  : 'Visit recipe pages to index ingredients for better matching.'}
-              </p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Results */}
       <AnimatePresence mode="wait">

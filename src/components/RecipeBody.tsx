@@ -16,50 +16,16 @@ type RichTextItem = {
   };
 };
 
-// ── Scale helpers ─────────────────────────────────────────────────────────────
-
-const FRACS: [number, string][] = [
-  [0.25, '¼'], [0.33, '⅓'], [0.5, '½'], [0.67, '⅔'], [0.75, '¾'],
-  [1.25, '1¼'], [1.33, '1⅓'], [1.5, '1½'], [1.67, '1⅔'], [1.75, '1¾'],
-  [2.25, '2¼'], [2.5, '2½'], [2.75, '2¾'], [3.5, '3½'],
-];
-
-function prettyNum(n: number): string {
-  if (n === Math.round(n)) return String(Math.round(n));
-  for (const [val, sym] of FRACS) {
-    if (Math.abs(n - val) < 0.05) return sym;
-  }
-  return n.toFixed(1);
-}
-
-function scaleText(text: string, factor: number): string {
-  if (factor === 1) return text;
-  // Match fractions (1/2), decimals (1.5), integers (2).
-  // Skip temperatures (°), quoted dimensions ("), and measurement words (inch, cm, mm).
-  return text.replace(/\b(\d+(?:\/\d+|\.\d+)?)(?!\d)(?!\s*(?:°|"|inch|cm|mm))/gi, (match, numStr: string) => {
-    let val: number;
-    if (numStr.includes('/')) {
-      const [a, b] = numStr.split('/').map(Number);
-      val = a / b;
-    } else {
-      val = parseFloat(numStr);
-    }
-    if (isNaN(val) || val === 0) return match;
-    return prettyNum(val * factor);
-  });
-}
-
 // ── Rich text renderer ────────────────────────────────────────────────────────
 
 function renderRichText(
   richText: RichTextItem[],
-  { skipBold = false, scale = 1 } = {}
+  { skipBold = false } = {}
 ): React.ReactNode {
   return richText.map((span, i) => {
-    const text = scale !== 1 ? scaleText(span.plain_text, scale) : span.plain_text;
     const { bold, italic, strikethrough, underline, code } = span.annotations;
     const applyBold = bold && !skipBold;
-    let node: React.ReactNode = text;
+    let node: React.ReactNode = span.plain_text;
 
     if (code)          node = <code key={i}>{node}</code>;
     if (applyBold)     node = <strong key={i}>{node}</strong>;
@@ -109,15 +75,6 @@ function groupBlocks(blocks: BlockObjectResponse[]): RenderedGroup[] {
   return groups;
 }
 
-// ── Scale controls ────────────────────────────────────────────────────────────
-
-const SCALE_OPTIONS = [
-  { label: '½×', value: 0.5 },
-  { label: '1×', value: 1 },
-  { label: '2×', value: 2 },
-  { label: '3×', value: 3 },
-];
-
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function RecipeBody({
@@ -129,9 +86,6 @@ export default function RecipeBody({
 }) {
   const storageKey = slug ? `cookbook-checklist-${slug}` : null;
   const [checked, setChecked] = useState<Set<string>>(new Set());
-  const [scale, setScale] = useState(1);
-
-  const hasList = blocks.some(b => b.type === 'bulleted_list_item' || b.type === 'numbered_list_item');
 
   useEffect(() => {
     if (!storageKey) return;
@@ -151,22 +105,6 @@ export default function RecipeBody({
       }
     } catch {}
   }, [storageKey]);
-
-  // Cache ingredient text for pantry matching in RecipeSearch
-  useEffect(() => {
-    if (!slug) return;
-    const ingredients = blocks
-      .filter(b => b.type === 'bulleted_list_item')
-      .map(b => getBlockRichText(b).map(r => r.plain_text).join('').trim())
-      .filter(Boolean);
-    if (ingredients.length === 0) return;
-    try {
-      const raw = localStorage.getItem('cookbook-ingredients-index');
-      const index: Record<string, string[]> = raw ? JSON.parse(raw) : {};
-      index[slug] = ingredients;
-      localStorage.setItem('cookbook-ingredients-index', JSON.stringify(index));
-    } catch {}
-  }, [slug, blocks]);
 
   function toggle(id: string) {
     setChecked((prev) => {
@@ -191,26 +129,6 @@ export default function RecipeBody({
 
   return (
     <div>
-      {/* Scale controls */}
-      {hasList && (
-        <div className="flex items-center gap-1.5 mb-4 flex-wrap">
-          <span className="text-xs text-ink-muted font-medium mr-1">Scale:</span>
-          {SCALE_OPTIONS.map(opt => (
-            <button
-              key={opt.value}
-              onClick={() => setScale(opt.value)}
-              className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors duration-150 ${
-                scale === opt.value
-                  ? 'bg-accent text-white'
-                  : 'border border-border text-ink-muted hover:border-accent/30 hover:text-ink'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      )}
-
       {/* Checklist reset */}
       {checked.size > 0 && (
         <div className="flex items-center justify-between mb-4 text-xs text-ink-muted">
@@ -228,7 +146,7 @@ export default function RecipeBody({
       <div className="prose prose-neutral max-w-none dark:prose-invert">
         {groups.map((group, i) => {
           if ('kind' in group) {
-            // Bulleted lists (ingredients): custom checkbox UI with visible indicators
+            // Bulleted lists: custom checkbox UI with visible indicators
             if (group.kind === 'bulleted_list_item') {
               return (
                 <div key={i} className="not-prose my-4 flex flex-col gap-2">
@@ -248,7 +166,7 @@ export default function RecipeBody({
                         <span className={`text-sm leading-relaxed transition-all duration-200 ${
                           isChecked ? 'line-through opacity-40 text-ink-muted' : 'text-ink'
                         }`}>
-                          {renderRichText(getBlockRichText(item), { scale })}
+                          {renderRichText(getBlockRichText(item))}
                         </span>
                       </div>
                     );
@@ -257,7 +175,7 @@ export default function RecipeBody({
               );
             }
 
-            // Numbered lists (steps): keep prose styling, still clickable
+            // Numbered lists: keep prose styling, still clickable
             return (
               <ol key={i}>
                 {group.items.map((item) => {

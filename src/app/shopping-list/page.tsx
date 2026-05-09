@@ -42,6 +42,10 @@ export default function ShoppingListPage() {
     save(items.filter(i => !i.checked));
   }
 
+  function clearAll() {
+    save([]);
+  }
+
   function toggleCollapse(cat: string) {
     setCollapsed(prev => {
       const next = new Set(prev);
@@ -73,14 +77,25 @@ export default function ShoppingListPage() {
             {checkedCount > 0 ? `, ${checkedCount} checked` : ''}
           </p>
         </div>
-        {checkedCount > 0 && (
-          <button
-            onClick={clearChecked}
-            className="flex items-center gap-1.5 text-xs text-accent hover:text-accent-hover transition-colors"
-          >
-            <Trash2 size={12} />
-            Clear checked
-          </button>
+        {items.length > 0 && (
+          <div className="flex items-center gap-3">
+            {checkedCount > 0 && (
+              <button
+                onClick={clearChecked}
+                className="flex items-center gap-1.5 text-xs text-ink-muted hover:text-ink transition-colors"
+              >
+                <Trash2 size={12} />
+                Clear checked
+              </button>
+            )}
+            <button
+              onClick={clearAll}
+              className="flex items-center gap-1.5 text-xs text-accent hover:text-accent-hover transition-colors"
+            >
+              <Trash2 size={12} />
+              Clear all
+            </button>
+          </div>
         )}
       </div>
 

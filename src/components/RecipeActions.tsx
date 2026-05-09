@@ -33,6 +33,63 @@ function categorize(text: string): string {
   return 'Other';
 }
 
+const INGREDIENT_KW = ['ingredient', 'what you need', "you'll need", 'shopping list'];
+const INSTRUCTION_KW = ['instruction', 'step', 'method', 'direction', 'how to', 'preparation', 'procedure'];
+
+function extractIngredients(blocks: BlockObjectResponse[]): string[] {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const b = blocks as any[];
+
+  function isHeading(block: { type: string }) {
+    return block.type === 'heading_1' || block.type === 'heading_2' || block.type === 'heading_3';
+  }
+
+  function headingText(block: { type: string; [key: string]: unknown }): string {
+    const rich = (block[block.type] as { rich_text?: { plain_text: string }[] })?.rich_text ?? [];
+    return rich.map(r => r.plain_text).join('').toLowerCase();
+  }
+
+  function listText(block: { type: string; [key: string]: unknown }): string {
+    const rich = (block[block.type] as { rich_text?: { plain_text: string }[] })?.rich_text ?? [];
+    return rich.map(r => r.plain_text).join('').trim();
+  }
+
+  const isList = (block: { type: string }) =>
+    block.type === 'bulleted_list_item' || block.type === 'numbered_list_item';
+
+  // If recipe has an explicit "Ingredients" heading, collect only from that section
+  const hasIngredientHeading = b.some(block => isHeading(block) && INGREDIENT_KW.some(k => headingText(block).includes(k)));
+
+  if (hasIngredientHeading) {
+    let collecting = false;
+    const result: string[] = [];
+    for (const block of b) {
+      if (isHeading(block)) {
+        collecting = INGREDIENT_KW.some(k => headingText(block).includes(k));
+        continue;
+      }
+      if (collecting && isList(block)) {
+        const text = listText(block);
+        if (text) result.push(text);
+      }
+    }
+    return result;
+  }
+
+  // No "Ingredients" heading — collect list items before the first instruction heading
+  const instructionIdx = b.findIndex(
+    block => isHeading(block) && INSTRUCTION_KW.some(k => headingText(block).includes(k))
+  );
+  const relevantBlocks = instructionIdx === -1 ? b : b.slice(0, instructionIdx);
+
+  // Prefer bulleted items as the safer default when structure is ambiguous
+  const bulleted = relevantBlocks.filter((bl: { type: string }) => bl.type === 'bulleted_list_item').map(listText).filter(Boolean);
+  if (bulleted.length > 0) return bulleted;
+
+  // Last resort: all list items before instruction heading
+  return relevantBlocks.filter(isList).map(listText).filter(Boolean);
+}
+
 export default function RecipeActions({
   blocks,
   slug,
@@ -62,12 +119,9 @@ export default function RecipeActions({
   function addShopping() {
     const existing = sGet<ShoppingItem[]>('cookbook-shopping') ?? [];
     const seen = new Set(existing.map(i => i.text.toLowerCase()));
+    const ingredients = extractIngredients(blocks);
     const newItems: ShoppingItem[] = [];
-    for (const block of blocks) {
-      if (block.type !== 'bulleted_list_item' && block.type !== 'numbered_list_item') continue;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rich = (block as any)[block.type]?.rich_text ?? [];
-      const text = rich.map((r: { plain_text: string }) => r.plain_text).join('').trim();
+    for (const text of ingredients) {
       if (!text || seen.has(text.toLowerCase())) continue;
       newItems.push({
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
