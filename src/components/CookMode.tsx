@@ -7,21 +7,85 @@ import type { BlockObjectResponse } from '@notionhq/client/build/src/api-endpoin
 
 type Step = { text: string; section: string };
 
+const INGREDIENT_KW = ['ingredient', 'what you need', "you'll need"];
+const INSTRUCTION_KW = ['instruction', 'step', 'method', 'direction', 'how to', 'preparation', 'procedure'];
+
 function extractSteps(blocks: BlockObjectResponse[]): Step[] {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const b = blocks as any[];
+
+  function isHeading(block: { type: string }) {
+    return block.type === 'heading_1' || block.type === 'heading_2' || block.type === 'heading_3';
+  }
+
+  function richText(block: { type: string; [k: string]: unknown }): string {
+    const rich = (block[block.type] as { rich_text?: { plain_text: string }[] })?.rich_text ?? [];
+    return rich.map(r => r.plain_text).join('');
+  }
+
+  const isList = (block: { type: string }) =>
+    block.type === 'bulleted_list_item' || block.type === 'numbered_list_item';
+
+  const hasInstructionHeading = b.some(
+    bl => isHeading(bl) && INSTRUCTION_KW.some(k => richText(bl).toLowerCase().includes(k))
+  );
+
   const steps: Step[] = [];
   let section = '';
-  for (const block of blocks) {
-    if (block.type === 'heading_2' || block.type === 'heading_3') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rich = (block as any)[block.type]?.rich_text ?? [];
-      section = rich.map((r: { plain_text: string }) => r.plain_text).join('');
-    } else if (block.type === 'bulleted_list_item' || block.type === 'numbered_list_item') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rich = (block as any)[block.type]?.rich_text ?? [];
-      const text = rich.map((r: { plain_text: string }) => r.plain_text).join('').trim();
+
+  if (hasInstructionHeading) {
+    // Heading-aware: skip ingredient sections, collect instruction sections
+    let collecting = false;
+    for (const block of b) {
+      if (isHeading(block)) {
+        const text = richText(block).toLowerCase();
+        if (INSTRUCTION_KW.some(k => text.includes(k))) {
+          collecting = true;
+          section = richText(block);
+        } else if (INGREDIENT_KW.some(k => text.includes(k))) {
+          collecting = false;
+        } else {
+          // Other heading (e.g. "Notes", "Tips") — keep collecting under new section label
+          if (collecting) section = richText(block);
+        }
+        continue;
+      }
+      if (collecting && isList(block)) {
+        const text = richText(block).trim();
+        if (text) steps.push({ text, section });
+      }
+    }
+    return steps;
+  }
+
+  // No instruction heading — prefer numbered list items (steps) over bulleted (ingredients)
+  for (const block of b) {
+    if (isHeading(block)) {
+      const text = richText(block).toLowerCase();
+      // Skip ingredients section even without explicit instruction heading
+      if (INGREDIENT_KW.some(k => text.includes(k))) {
+        section = '';
+        continue;
+      }
+      section = richText(block);
+      continue;
+    }
+    if (block.type === 'numbered_list_item') {
+      const text = richText(block).trim();
       if (text) steps.push({ text, section });
     }
   }
+
+  // Last resort: if no numbered items found, include all list items
+  if (steps.length === 0) {
+    for (const block of b) {
+      if (isList(block)) {
+        const text = richText(block).trim();
+        if (text) steps.push({ text, section: '' });
+      }
+    }
+  }
+
   return steps;
 }
 
