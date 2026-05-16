@@ -89,6 +89,27 @@ function extractSteps(blocks: BlockObjectResponse[]): Step[] {
   return steps;
 }
 
+type DetectedTime = { label: string; seconds: number };
+
+function detectTimes(text: string): DetectedTime[] {
+  const re = /(\d+(?:\.\d+)?)\s*(hours?|hrs?|minutes?|mins?|seconds?|secs?)/gi;
+  const results: DetectedTime[] = [];
+  let match;
+  while ((match = re.exec(text)) !== null) {
+    const val = parseFloat(match[1]);
+    const unit = match[2].toLowerCase();
+    let seconds: number;
+    if (unit.startsWith('h')) seconds = Math.round(val * 3600);
+    else if (unit.startsWith('m')) seconds = Math.round(val * 60);
+    else seconds = Math.round(val);
+    if (seconds > 0) {
+      const label = unit.startsWith('h') ? `${val}h` : unit.startsWith('m') ? `${val}m` : `${val}s`;
+      results.push({ label, seconds });
+    }
+  }
+  return results;
+}
+
 function useWakeLock() {
   useEffect(() => {
     let sentinel: { release: () => Promise<void> } | null = null;
@@ -185,6 +206,7 @@ export default function CookMode({
   }
 
   const step = steps[current];
+  const detectedTimes = detectTimes(step.text);
 
   return (
     <motion.div
@@ -214,18 +236,34 @@ export default function CookMode({
 
       {/* Step */}
       <div className="flex-1 flex items-center px-5 py-4 overflow-hidden min-h-0">
-        <AnimatePresence mode="wait">
-          <motion.p
-            key={current}
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -50 }}
-            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-            className="font-display text-3xl sm:text-4xl lg:text-5xl leading-snug font-medium"
-          >
-            {step.text}
-          </motion.p>
-        </AnimatePresence>
+        <div className="w-full">
+          <AnimatePresence mode="wait">
+            <motion.p
+              key={current}
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -50 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              className="font-display text-3xl sm:text-4xl lg:text-5xl leading-snug font-medium"
+            >
+              {step.text}
+            </motion.p>
+          </AnimatePresence>
+          {detectedTimes.length > 0 && (
+            <div className="mt-6 flex gap-2 flex-wrap">
+              {detectedTimes.map((t, i) => (
+                <button
+                  key={i}
+                  onClick={() => { setCountdown(t.seconds); setElapsed(0); setRunning(true); }}
+                  className="flex items-center gap-1.5 rounded-lg border border-amber-600/30 bg-amber-600/15 hover:bg-amber-600/30 text-amber-300 px-3 py-1.5 text-sm font-medium transition-colors"
+                >
+                  <Play size={11} />
+                  Start {t.label} timer
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Footer */}

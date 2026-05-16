@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { UtensilsCrossed, Bookmark, BookmarkCheck, ShoppingCart, Check } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
@@ -106,6 +106,15 @@ export default function RecipeActions({
   const [cookModeOpen, setCookModeOpen] = useState(false);
   const [inQueue, setInQueue] = useState(() => isInQueue(slug));
   const [shoppingDone, setShoppingDone] = useState<number | false>(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('cookbook-recently-viewed');
+      const list: { slug: string; name: string }[] = raw ? JSON.parse(raw) : [];
+      const updated = [{ slug, name }, ...list.filter(r => r.slug !== slug)].slice(0, 6);
+      localStorage.setItem('cookbook-recently-viewed', JSON.stringify(updated));
+    } catch {}
+  }, [slug, name]);
 
   function toggleQueue() {
     if (inQueue) {

@@ -1,13 +1,15 @@
 'use client';
 
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { Search, X, ChefHat, ChevronDown, Check } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Search, X, ChefHat, ChevronDown, Check, Wand2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { RecipeSummary, Nutrition } from '@/lib/notion';
 import { cn } from '@/lib/cn';
 import RecipeGrid from './RecipeGrid';
 import CollectionShelf from './CollectionShelf';
 import MealQueueShelf from './MealQueueShelf';
+import RecentlyViewedShelf from './RecentlyViewedShelf';
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -97,6 +99,7 @@ export default function RecipeSearch({
   const [nutritionFilter, setNutritionFilter] = useState<string | null>(null);
   const [openDropdown, setOpenDropdown] = useState<'tags' | 'serves' | 'nutrition' | null>(null);
   const [activeCollection, setActiveCollection] = useState<string | null>(initialTag ?? null);
+  const router = useRouter();
 
   const allTags = useMemo(() => {
     const tags = new Set<string>();
@@ -164,47 +167,64 @@ export default function RecipeSearch({
     setActiveCollection(null);
   }
 
+  function surpriseMe() {
+    if (recipes.length === 0) return;
+    const pick = recipes[Math.floor(Math.random() * recipes.length)];
+    router.push(`/recipes/${pick.slug}`);
+  }
+
   const closeDropdown = useCallback(() => setOpenDropdown(null), []);
   const showEmpty = (hasQuery || hasActiveFilters) && filtered.length === 0;
 
   return (
     <div>
       <MealQueueShelf />
+      <RecentlyViewedShelf />
 
       {topCollections.length > 0 && (
         <CollectionShelf tags={topCollections} selected={activeCollection} onSelect={selectCollection} />
       )}
 
-      {/* Search bar */}
+      {/* Search bar + Surprise Me */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease }}
-        className="relative mb-4 max-w-sm"
+        className="flex items-center gap-3 mb-4"
       >
-        <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
-        <input
-          type="search"
-          placeholder="Search recipes…"
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          className="w-full rounded-lg border border-border bg-surface-card py-2 pl-9 pr-8 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 transition-colors duration-150"
-        />
-        <AnimatePresence>
-          {hasQuery && (
-            <motion.button
-              initial={{ opacity: 0, scale: 0.7 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.7 }}
-              transition={{ duration: 0.15 }}
-              onClick={() => setQuery('')}
-              aria-label="Clear search"
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink transition-colors duration-150"
-            >
-              <X size={14} />
-            </motion.button>
-          )}
-        </AnimatePresence>
+        <div className="relative max-w-sm flex-1">
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
+          <input
+            type="search"
+            placeholder="Search recipes…"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            className="w-full rounded-lg border border-border bg-surface-card py-2 pl-9 pr-8 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 transition-colors duration-150"
+          />
+          <AnimatePresence>
+            {hasQuery && (
+              <motion.button
+                initial={{ opacity: 0, scale: 0.7 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.7 }}
+                transition={{ duration: 0.15 }}
+                onClick={() => setQuery('')}
+                aria-label="Clear search"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink transition-colors duration-150"
+              >
+                <X size={14} />
+              </motion.button>
+            )}
+          </AnimatePresence>
+        </div>
+        <button
+          onClick={surpriseMe}
+          title="Pick a random recipe"
+          className="flex items-center gap-1.5 rounded-lg border border-border bg-surface-card px-3 py-2 text-sm text-ink-muted hover:border-accent/30 hover:text-ink transition-colors duration-150 shrink-0"
+        >
+          <Wand2 size={14} />
+          Surprise me
+        </button>
       </motion.div>
 
       {/* Filter row */}

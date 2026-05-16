@@ -17,6 +17,7 @@ export function addToQueue(item: QueueItem) {
   const q = sGet<QueueItem[]>('cookbook-queue') ?? [];
   if (q.some(i => i.slug === item.slug)) return;
   sSet('cookbook-queue', [...q, item]);
+  try { localStorage.setItem('cookbook-queue-ever-used', '1'); } catch {}
   window.dispatchEvent(new Event('cookbook-queue-change'));
 }
 
@@ -41,8 +42,12 @@ function fmtTime(min: number) {
 export default function MealQueueShelf() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [open, setOpen] = useState(true);
+  const [everUsed, setEverUsed] = useState(false);
 
-  const refresh = () => setQueue(sGet<QueueItem[]>('cookbook-queue') ?? []);
+  const refresh = () => {
+    setQueue(sGet<QueueItem[]>('cookbook-queue') ?? []);
+    try { setEverUsed(!!localStorage.getItem('cookbook-queue-ever-used')); } catch {}
+  };
 
   useEffect(() => {
     refresh();
@@ -53,6 +58,7 @@ export default function MealQueueShelf() {
   const totalMin = queue.reduce((t, i) => t + (i.prepTime ?? 0) + (i.cookTime ?? 0), 0);
 
   if (queue.length === 0) {
+    if (!everUsed) return null;
     return (
       <div className="mb-6 rounded-xl border border-dashed border-border bg-surface-card px-4 py-3 text-sm text-ink-faint flex items-center gap-2">
         <CalendarDays size={14} className="text-ink-faint shrink-0" />
