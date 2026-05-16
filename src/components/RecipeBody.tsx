@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { RotateCcw, Check } from 'lucide-react';
 import type { BlockObjectResponse } from '@notionhq/client/build/src/api-endpoints';
+import { useAuth } from '@clerk/nextjs';
 
 type RichTextItem = {
   plain_text: string;
@@ -84,35 +85,49 @@ export default function RecipeBody({
   blocks: BlockObjectResponse[];
   slug?: string;
 }) {
-  const storageKey = slug ? `cookbook-checklist-${slug}` : null;
+  const { isSignedIn, isLoaded: authLoaded } = useAuth();
   const [checked, setChecked] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!storageKey) return;
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        setChecked(new Set(parsed));
-      } else if (parsed && typeof parsed === 'object') {
-        const age = Date.now() - (parsed.savedAt ?? 0);
-        if (age < 24 * 60 * 60 * 1000) {
-          setChecked(new Set(parsed.ids ?? []));
-        } else {
-          localStorage.removeItem(storageKey);
+    if (!slug || !authLoaded) return;
+    if (isSignedIn) {
+      fetch(`/api/checklist/${slug}`)
+        .then(r => r.json())
+        .then(data => {
+          if (Array.isArray(data.itemIds)) setChecked(new Set(data.itemIds));
+        })
+        .catch(() => {});
+    } else {
+      // Fallback for signed-out users
+      try {
+        const raw = localStorage.getItem(`cookbook-checklist-${slug}`);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setChecked(new Set(parsed));
+        } else if (parsed && typeof parsed === 'object') {
+          const age = Date.now() - (parsed.savedAt ?? 0);
+          if (age < 24 * 60 * 60 * 1000) setChecked(new Set(parsed.ids ?? []));
         }
-      }
-    } catch {}
-  }, [storageKey]);
+      } catch {}
+    }
+  }, [slug, isSignedIn, authLoaded]);
 
   function toggle(id: string) {
     setChecked((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
-      if (storageKey) {
-        try { localStorage.setItem(storageKey, JSON.stringify({ ids: [...next], savedAt: Date.now() })); } catch {}
+      if (slug) {
+        if (isSignedIn) {
+          fetch(`/api/checklist/${slug}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ itemIds: [...next] }),
+          }).catch(() => {});
+        } else {
+          try { localStorage.setItem(`cookbook-checklist-${slug}`, JSON.stringify({ ids: [...next], savedAt: Date.now() })); } catch {}
+        }
       }
       return next;
     });
@@ -120,8 +135,12 @@ export default function RecipeBody({
 
   function reset() {
     setChecked(new Set());
-    if (storageKey) {
-      try { localStorage.removeItem(storageKey); } catch {}
+    if (slug) {
+      if (isSignedIn) {
+        fetch(`/api/checklist/${slug}`, { method: 'DELETE' }).catch(() => {});
+      } else {
+        try { localStorage.removeItem(`cookbook-checklist-${slug}`); } catch {}
+      }
     }
   }
 
@@ -129,7 +148,6 @@ export default function RecipeBody({
 
   return (
     <div>
-      {/* Checklist reset */}
       {checked.size > 0 && (
         <div className="flex items-center justify-between mb-4 text-xs text-ink-muted">
           <span>{checked.size} item{checked.size !== 1 ? 's' : ''} checked off</span>
@@ -146,7 +164,6 @@ export default function RecipeBody({
       <div className="prose prose-neutral max-w-none dark:prose-invert">
         {groups.map((group, i) => {
           if ('kind' in group) {
-            // Bulleted lists: custom checkbox UI with visible indicators
             if (group.kind === 'bulleted_list_item') {
               return (
                 <div key={i} className="not-prose my-4 flex flex-col gap-2">
@@ -175,7 +192,6 @@ export default function RecipeBody({
               );
             }
 
-            // Numbered lists: keep prose styling, still clickable
             return (
               <ol key={i}>
                 {group.items.map((item) => {

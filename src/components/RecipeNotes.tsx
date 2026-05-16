@@ -3,36 +3,43 @@
 import { useState, useEffect, useRef } from 'react';
 import { StickyNote, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '@clerk/nextjs';
 
 export default function RecipeNotes({ slug }: { slug: string }) {
-  const key = `cookbook-notes-${slug}`;
+  const { isSignedIn, isLoaded: authLoaded } = useAuth();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(key);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        const t = parsed.text ?? '';
+    if (!authLoaded || !isSignedIn) return;
+    fetch(`/api/notes/${slug}`)
+      .then(r => r.json())
+      .then(data => {
+        const t = data.text ?? '';
         setText(t);
-        setSavedAt(parsed.savedAt ?? null);
+        setSavedAt(data.savedAt ?? null);
         if (t.trim()) setOpen(true);
-      }
-    } catch {}
-  }, [key]);
+      })
+      .catch(() => {});
+  }, [slug, isSignedIn, authLoaded]);
 
   function handleChange(val: string) {
     setText(val);
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
       const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      try { localStorage.setItem(key, JSON.stringify({ text: val, savedAt: now })); } catch {}
+      fetch(`/api/notes/${slug}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: val }),
+      }).catch(() => {});
       setSavedAt(now);
     }, 500);
   }
+
+  if (!isSignedIn) return null;
 
   return (
     <div className="mt-10 border-t border-border pt-6">

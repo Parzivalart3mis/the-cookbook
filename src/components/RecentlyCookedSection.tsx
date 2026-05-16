@@ -3,27 +3,32 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { CheckCircle2 } from 'lucide-react';
-import { sGet } from '@/lib/storage';
+import { useAuth } from '@clerk/nextjs';
 import type { RecipeSummary } from '@/lib/notion';
 
-type CookedMap = Record<string, string>;
-
 export default function RecentlyCookedSection({ recipes }: { recipes: RecipeSummary[] }) {
+  const { isSignedIn, isLoaded: authLoaded } = useAuth();
   const [recent, setRecent] = useState<{ recipe: RecipeSummary; date: Date }[]>([]);
 
   useEffect(() => {
-    const map = sGet<CookedMap>('cookbook-cooked') ?? {};
+    if (!authLoaded || !isSignedIn) return;
     const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const items = Object.entries(map)
-      .filter(([, iso]) => new Date(iso).getTime() > cutoff)
-      .map(([slug, iso]) => {
-        const recipe = recipes.find(r => r.slug === slug);
-        return recipe ? { recipe, date: new Date(iso) } : null;
+    fetch('/api/cooked')
+      .then(r => r.json())
+      .then(data => {
+        const map: Record<string, string> = data.cooked ?? {};
+        const items = Object.entries(map)
+          .filter(([, iso]) => new Date(iso).getTime() > cutoff)
+          .map(([slug, iso]) => {
+            const recipe = recipes.find(r => r.slug === slug);
+            return recipe ? { recipe, date: new Date(iso) } : null;
+          })
+          .filter(Boolean) as { recipe: RecipeSummary; date: Date }[];
+        items.sort((a, b) => b.date.getTime() - a.date.getTime());
+        setRecent(items);
       })
-      .filter(Boolean) as { recipe: RecipeSummary; date: Date }[];
-    items.sort((a, b) => b.date.getTime() - a.date.getTime());
-    setRecent(items);
-  }, [recipes]);
+      .catch(() => {});
+  }, [recipes, isSignedIn, authLoaded]);
 
   if (recent.length === 0) return null;
 

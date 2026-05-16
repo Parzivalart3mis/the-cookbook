@@ -1,36 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, X, Clock, CalendarDays } from 'lucide-react';
-import { sGet, sSet } from '@/lib/storage';
-
-export type QueueItem = {
-  slug: string;
-  name: string;
-  prepTime: number | null;
-  cookTime: number | null;
-};
-
-export function addToQueue(item: QueueItem) {
-  const q = sGet<QueueItem[]>('cookbook-queue') ?? [];
-  if (q.some(i => i.slug === item.slug)) return;
-  sSet('cookbook-queue', [...q, item]);
-  try { localStorage.setItem('cookbook-queue-ever-used', '1'); } catch {}
-  window.dispatchEvent(new Event('cookbook-queue-change'));
-}
-
-export function removeFromQueue(slug: string) {
-  const q = sGet<QueueItem[]>('cookbook-queue') ?? [];
-  sSet('cookbook-queue', q.filter(i => i.slug !== slug));
-  window.dispatchEvent(new Event('cookbook-queue-change'));
-}
-
-export function isInQueue(slug: string): boolean {
-  const q = sGet<QueueItem[]>('cookbook-queue') ?? [];
-  return q.some(i => i.slug === slug);
-}
+import { useQueue } from './QueueProvider';
+import { useAuth } from '@clerk/nextjs';
 
 function fmtTime(min: number) {
   if (min < 60) return `${min}m`;
@@ -40,32 +15,13 @@ function fmtTime(min: number) {
 }
 
 export default function MealQueueShelf() {
-  const [queue, setQueue] = useState<QueueItem[]>([]);
+  const { queue, isLoaded, removeFromQueue, clearQueue } = useQueue();
+  const { isSignedIn } = useAuth();
   const [open, setOpen] = useState(true);
-  const [everUsed, setEverUsed] = useState(false);
 
-  const refresh = () => {
-    setQueue(sGet<QueueItem[]>('cookbook-queue') ?? []);
-    try { setEverUsed(!!localStorage.getItem('cookbook-queue-ever-used')); } catch {}
-  };
-
-  useEffect(() => {
-    refresh();
-    window.addEventListener('cookbook-queue-change', refresh);
-    return () => window.removeEventListener('cookbook-queue-change', refresh);
-  }, []);
+  if (!isLoaded || !isSignedIn || queue.length === 0) return null;
 
   const totalMin = queue.reduce((t, i) => t + (i.prepTime ?? 0) + (i.cookTime ?? 0), 0);
-
-  if (queue.length === 0) {
-    if (!everUsed) return null;
-    return (
-      <div className="mb-6 rounded-xl border border-dashed border-border bg-surface-card px-4 py-3 text-sm text-ink-faint flex items-center gap-2">
-        <CalendarDays size={14} className="text-ink-faint shrink-0" />
-        <span>Bookmark recipes to build your week&apos;s meal plan.</span>
-      </div>
-    );
-  }
 
   return (
     <div className="mb-6 rounded-xl border border-border bg-surface-card overflow-hidden">
@@ -119,7 +75,7 @@ export default function MealQueueShelf() {
                 </div>
               ))}
               <button
-                onClick={() => { sSet('cookbook-queue', []); window.dispatchEvent(new Event('cookbook-queue-change')); }}
+                onClick={() => clearQueue()}
                 className="rounded-full px-3 py-1 text-xs text-ink-faint hover:text-ink transition-colors"
               >
                 Clear all

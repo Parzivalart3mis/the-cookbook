@@ -2,30 +2,36 @@
 
 import { useState, useEffect } from 'react';
 import { CheckCircle2, Circle } from 'lucide-react';
-import { sGet, sSet } from '@/lib/storage';
-
-type CookedMap = Record<string, string>; // slug → ISO date
+import { useAuth } from '@clerk/nextjs';
 
 export default function MarkCookedButton({ slug }: { slug: string }) {
+  const { isSignedIn, isLoaded: authLoaded } = useAuth();
   const [cookedDate, setCookedDate] = useState<string | null>(null);
 
   useEffect(() => {
-    const map = sGet<CookedMap>('cookbook-cooked') ?? {};
-    setCookedDate(map[slug] ?? null);
-  }, [slug]);
+    if (!authLoaded || !isSignedIn) return;
+    fetch('/api/cooked')
+      .then(r => r.json())
+      .then(data => setCookedDate(data.cooked?.[slug] ?? null))
+      .catch(() => {});
+  }, [slug, isSignedIn, authLoaded]);
 
-  function toggleCooked() {
-    const map = sGet<CookedMap>('cookbook-cooked') ?? {};
+  async function toggleCooked() {
     if (cookedDate) {
-      delete map[slug];
       setCookedDate(null);
+      await fetch(`/api/cooked?slug=${slug}`, { method: 'DELETE' });
     } else {
       const now = new Date().toISOString();
-      map[slug] = now;
       setCookedDate(now);
+      await fetch('/api/cooked', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug }),
+      });
     }
-    sSet('cookbook-cooked', map);
   }
+
+  if (!isSignedIn) return null;
 
   const label = cookedDate
     ? `Cooked ${new Date(cookedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`

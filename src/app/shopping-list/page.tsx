@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { ShoppingCart, Trash2, ChevronDown, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { sGet, sSet } from '@/lib/storage';
 
 type ShoppingItem = {
   id: string;
@@ -21,29 +20,38 @@ export default function ShoppingListPage() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setItems(sGet<ShoppingItem[]>('cookbook-shopping') ?? []);
-    setMounted(true);
+    fetch('/api/shopping')
+      .then(r => r.json())
+      .then(data => setItems(data.items ?? []))
+      .catch(() => {})
+      .finally(() => setMounted(true));
   }, []);
 
-  function save(next: ShoppingItem[]) {
-    setItems(next);
-    sSet('cookbook-shopping', next);
+  async function toggle(id: string) {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+    const next = !item.checked;
+    setItems(prev => prev.map(i => i.id === id ? { ...i, checked: next } : i));
+    await fetch('/api/shopping', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, checked: next }),
+    });
   }
 
-  function toggle(id: string) {
-    save(items.map(i => i.id === id ? { ...i, checked: !i.checked } : i));
+  async function remove(id: string) {
+    setItems(prev => prev.filter(i => i.id !== id));
+    await fetch(`/api/shopping?id=${id}`, { method: 'DELETE' });
   }
 
-  function remove(id: string) {
-    save(items.filter(i => i.id !== id));
+  async function clearChecked() {
+    setItems(prev => prev.filter(i => !i.checked));
+    await fetch('/api/shopping?clearChecked=1', { method: 'DELETE' });
   }
 
-  function clearChecked() {
-    save(items.filter(i => !i.checked));
-  }
-
-  function clearAll() {
-    save([]);
+  async function clearAll() {
+    setItems([]);
+    await fetch('/api/shopping?clearAll=1', { method: 'DELETE' });
   }
 
   function toggleCollapse(cat: string) {

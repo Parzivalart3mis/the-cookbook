@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ChefHat, ShoppingCart, CalendarDays } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
+import HeaderAuthArea from './HeaderAuthArea';
 
 export default function SiteHeader() {
   return (
@@ -30,6 +31,7 @@ export default function SiteHeader() {
             <ShoppingCart size={18} />
           </Link>
           <ThemeToggle />
+          <HeaderAuthArea />
         </div>
       </div>
     </header>

@@ -3,9 +3,9 @@
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Clock, BookmarkPlus, BookmarkCheck } from 'lucide-react';
-import { useState, useEffect } from 'react';
 import type { RecipeSummary } from '@/lib/notion';
-import { addToQueue, removeFromQueue, isInQueue } from './MealQueueShelf';
+import { useQueue } from './QueueProvider';
+import { useAuth } from '@clerk/nextjs';
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -28,15 +28,9 @@ export default function RecipeCard({
       ? recipe.prepTime + recipe.cookTime
       : recipe.prepTime ?? recipe.cookTime ?? null;
 
-  const [inQueue, setInQueue] = useState(false);
-
-  // Read queue state after mount (SSR-safe)
-  useEffect(() => {
-    setInQueue(isInQueue(recipe.slug));
-    const sync = () => setInQueue(isInQueue(recipe.slug));
-    window.addEventListener('cookbook-queue-change', sync);
-    return () => window.removeEventListener('cookbook-queue-change', sync);
-  }, [recipe.slug]);
+  const { isSignedIn } = useAuth();
+  const { addToQueue, removeFromQueue, isInQueue } = useQueue();
+  const inQueue = isInQueue(recipe.slug);
 
   function handleQueue(e: React.MouseEvent) {
     e.preventDefault();
@@ -46,7 +40,6 @@ export default function RecipeCard({
     } else {
       addToQueue({ slug: recipe.slug, name: recipe.name, prepTime: recipe.prepTime, cookTime: recipe.cookTime });
     }
-    setInQueue(q => !q);
   }
 
   return (
@@ -102,18 +95,19 @@ export default function RecipeCard({
           </motion.article>
         </Link>
 
-        {/* Queue button — outside Link to avoid navigation on click */}
-        <button
-          onClick={handleQueue}
-          title={inQueue ? 'Remove from queue' : 'Add to this week'}
-          className={`absolute top-3 right-3 z-10 p-1.5 rounded-lg border transition-colors duration-150 ${
-            inQueue
-              ? 'border-accent/50 bg-accent-light text-accent'
-              : 'border-border bg-surface-card text-ink-faint hover:border-accent/30 hover:text-accent'
-          }`}
-        >
-          {inQueue ? <BookmarkCheck size={13} /> : <BookmarkPlus size={13} />}
-        </button>
+        {isSignedIn && (
+          <button
+            onClick={handleQueue}
+            title={inQueue ? 'Remove from queue' : 'Add to this week'}
+            className={`absolute top-3 right-3 z-10 p-1.5 rounded-lg border transition-colors duration-150 ${
+              inQueue
+                ? 'border-accent/50 bg-accent-light text-accent'
+                : 'border-border bg-surface-card text-ink-faint hover:border-accent/30 hover:text-accent'
+            }`}
+          >
+            {inQueue ? <BookmarkCheck size={13} /> : <BookmarkPlus size={13} />}
+          </button>
+        )}
       </div>
     </motion.div>
   );

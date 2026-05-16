@@ -6,16 +6,8 @@ import { UtensilsCrossed, Bookmark, BookmarkCheck, ShoppingCart, Check } from 'l
 import { AnimatePresence } from 'framer-motion';
 import type { BlockObjectResponse } from '@notionhq/client/build/src/api-endpoints';
 import CookMode from './CookMode';
-import { addToQueue, removeFromQueue, isInQueue } from './MealQueueShelf';
-import { sGet, sSet } from '@/lib/storage';
-
-type ShoppingItem = {
-  id: string;
-  text: string;
-  category: string;
-  checked: boolean;
-  recipeName: string;
-};
+import { useQueue } from './QueueProvider';
+import { useAuth } from '@clerk/nextjs';
 
 const CATEGORIES: [string, string[]][] = [
   ['Produce', ['tomato', 'onion', 'garlic', 'pepper', 'lettuce', 'spinach', 'carrot', 'celery', 'potato', 'lemon', 'lime', 'mushroom', 'zucchini', 'cucumber', 'avocado', 'broccoli', 'kale', 'basil', 'cilantro', 'parsley', 'ginger', 'apple', 'banana', 'berry', 'mint', 'shallot', 'leek', 'cabbage']],
@@ -57,7 +49,6 @@ function extractIngredients(blocks: BlockObjectResponse[]): string[] {
   const isList = (block: { type: string }) =>
     block.type === 'bulleted_list_item' || block.type === 'numbered_list_item';
 
-  // If recipe has an explicit "Ingredients" heading, collect only from that section
   const hasIngredientHeading = b.some(block => isHeading(block) && INGREDIENT_KW.some(k => headingText(block).includes(k)));
 
   if (hasIngredientHeading) {
@@ -76,17 +67,14 @@ function extractIngredients(blocks: BlockObjectResponse[]): string[] {
     return result;
   }
 
-  // No "Ingredients" heading — collect list items before the first instruction heading
   const instructionIdx = b.findIndex(
     block => isHeading(block) && INSTRUCTION_KW.some(k => headingText(block).includes(k))
   );
   const relevantBlocks = instructionIdx === -1 ? b : b.slice(0, instructionIdx);
 
-  // Prefer bulleted items as the safer default when structure is ambiguous
   const bulleted = relevantBlocks.filter((bl: { type: string }) => bl.type === 'bulleted_list_item').map(listText).filter(Boolean);
   if (bulleted.length > 0) return bulleted;
 
-  // Last resort: all list items before instruction heading
   return relevantBlocks.filter(isList).map(listText).filter(Boolean);
 }
 
@@ -104,8 +92,10 @@ export default function RecipeActions({
   cookTime: number | null;
 }) {
   const [cookModeOpen, setCookModeOpen] = useState(false);
-  const [inQueue, setInQueue] = useState(() => isInQueue(slug));
-  const [shoppingDone, setShoppingDone] = useState<number | false>(false);
+  const [shoppingDone, setShoppingDone] = useState<boolean | null>(null);
+  const { isSignedIn } = useAuth();
+  const { addToQueue, removeFromQueue, isInQueue } = useQueue();
+  const inQueue = isInQueue(slug);
 
   useEffect(() => {
     try {
@@ -122,27 +112,23 @@ export default function RecipeActions({
     } else {
       addToQueue({ slug, name, prepTime, cookTime });
     }
-    setInQueue(q => !q);
   }
 
-  function addShopping() {
-    const existing = sGet<ShoppingItem[]>('cookbook-shopping') ?? [];
-    const seen = new Set(existing.map(i => i.text.toLowerCase()));
+  async function addShopping() {
     const ingredients = extractIngredients(blocks);
-    const newItems: ShoppingItem[] = [];
-    for (const text of ingredients) {
-      if (!text || seen.has(text.toLowerCase())) continue;
-      newItems.push({
-        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        text,
-        category: categorize(text),
-        checked: false,
-        recipeName: name,
-      });
-    }
-    sSet('cookbook-shopping', [...existing, ...newItems]);
-    setShoppingDone(newItems.length);
-    setTimeout(() => setShoppingDone(false), 3000);
+    const items = ingredients.map(text => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      text,
+      category: categorize(text),
+      recipeName: name,
+    }));
+    await fetch('/api/shopping', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items }),
+    });
+    setShoppingDone(true);
+    setTimeout(() => setShoppingDone(null), 3000);
   }
 
   return (
@@ -156,34 +142,38 @@ export default function RecipeActions({
           Cook Mode
         </button>
 
-        <button
-          onClick={toggleQueue}
-          className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition-colors duration-150 ${
-            inQueue
-              ? 'border-accent/50 bg-accent-light text-accent'
-              : 'border-border text-ink-muted hover:border-accent/30 hover:text-ink'
-          }`}
-        >
-          {inQueue ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
-          {inQueue ? 'In Queue' : 'Add to Queue'}
-        </button>
-
-        {shoppingDone !== false ? (
-          <Link
-            href="/shopping-list"
-            className="flex items-center gap-1.5 rounded-xl border border-green-500/50 bg-green-500/10 px-3 py-2 text-sm font-medium text-green-600 transition-colors duration-150 hover:bg-green-500/20"
-          >
-            <Check size={14} />
-            {shoppingDone > 0 ? `Added ${shoppingDone} item${shoppingDone !== 1 ? 's' : ''} · View list` : 'Already in list'}
-          </Link>
-        ) : (
+        {isSignedIn && (
           <button
-            onClick={addShopping}
-            className="flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium text-ink-muted transition-colors duration-150 hover:border-accent/30 hover:text-ink"
+            onClick={toggleQueue}
+            className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition-colors duration-150 ${
+              inQueue
+                ? 'border-accent/50 bg-accent-light text-accent'
+                : 'border-border text-ink-muted hover:border-accent/30 hover:text-ink'
+            }`}
           >
-            <ShoppingCart size={14} />
-            Shopping List
+            {inQueue ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
+            {inQueue ? 'In Queue' : 'Add to Queue'}
           </button>
+        )}
+
+        {isSignedIn && (
+          shoppingDone ? (
+            <Link
+              href="/shopping-list"
+              className="flex items-center gap-1.5 rounded-xl border border-green-500/50 bg-green-500/10 px-3 py-2 text-sm font-medium text-green-600 transition-colors duration-150 hover:bg-green-500/20"
+            >
+              <Check size={14} />
+              Added · View list
+            </Link>
+          ) : (
+            <button
+              onClick={addShopping}
+              className="flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium text-ink-muted transition-colors duration-150 hover:border-accent/30 hover:text-ink"
+            >
+              <ShoppingCart size={14} />
+              Shopping List
+            </button>
+          )
         )}
       </div>
 
