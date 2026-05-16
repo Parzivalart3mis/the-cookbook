@@ -69,6 +69,7 @@ export interface RecipeSummary {
   source: string | null;
   tags: string[];
   nutrition: Nutrition;
+  coverImage: string | null;
 }
 
 export interface Recipe extends RecipeSummary {
@@ -79,7 +80,7 @@ export interface Recipe extends RecipeSummary {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Props = Record<string, any>;
 
-function parseProps(props: Props): Pick<RecipeSummary, 'name' | 'servings' | 'prepTime' | 'cookTime' | 'source' | 'tags' | 'nutrition'> {
+function parseProps(props: Props): Pick<RecipeSummary, 'name' | 'servings' | 'prepTime' | 'cookTime' | 'source' | 'tags' | 'nutrition' | 'coverImage'> {
   // properties.Name.title can be empty array if page is untitled
   const titleArr: Array<{ plain_text: string }> = props.Name?.title ?? [];
   const name = titleArr.map((t) => t.plain_text).join('') || 'Untitled';
@@ -93,6 +94,7 @@ function parseProps(props: Props): Pick<RecipeSummary, 'name' | 'servings' | 'pr
     cookTime:   (props['Cook Time']?.number as number | null) ?? null,
     source:     (props.Source?.url as string | null) ?? null,
     tags:       ((props.Tags?.multi_select ?? []) as Array<{ name: string }>).map((t) => t.name),
+    coverImage: (props['Cover Image']?.url as string | null) ?? null,
     nutrition: {
       calories:           num('Calories'),
       totalFat:           num('Total Fat'),

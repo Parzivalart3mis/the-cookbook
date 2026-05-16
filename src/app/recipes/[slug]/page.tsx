@@ -8,6 +8,7 @@ import ReadingProgress from '@/components/ReadingProgress';
 import RecipeBody from '@/components/RecipeBody';
 import RecipeActions from '@/components/RecipeActions';
 import RecipeNotes from '@/components/RecipeNotes';
+import RecipeImageManager from '@/components/RecipeImageManager';
 
 export const revalidate = 60;
 
@@ -24,7 +25,10 @@ export async function generateMetadata({
   const { slug } = await params;
   const recipe = await getRecipeBySlug(slug);
   if (!recipe) return {};
-  return { title: `${recipe.name} — The Cookbook` };
+  return {
+    title: `${recipe.name} — The Cookbook`,
+    ...(recipe.coverImage ? { openGraph: { images: [recipe.coverImage] } } : {}),
+  };
 }
 
 export default async function RecipePage({
@@ -42,21 +46,42 @@ export default async function RecipePage({
       <ReadingProgress />
       <BackLink />
 
+      {/* Hero image */}
+      {recipe.coverImage && (
+        <MotionItem>
+          <div className="mb-6 -mt-2 rounded-2xl overflow-hidden aspect-video w-full">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={recipe.coverImage}
+              alt={recipe.name}
+              className="w-full h-full object-cover"
+            />
+          </div>
+        </MotionItem>
+      )}
+
       <MotionItem>
-        <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight text-ink leading-tight mb-4">
+        <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight text-ink leading-tight mb-2">
           {recipe.name}
         </h1>
+        <RecipeImageManager
+          pageId={recipe.id}
+          recipeName={recipe.name}
+          hasImage={!!recipe.coverImage}
+        />
       </MotionItem>
 
       <MotionItem>
-        <RecipeMeta
-          servings={recipe.servings}
-          prepTime={recipe.prepTime}
-          cookTime={recipe.cookTime}
-          source={recipe.source}
-        >
-          <NutritionModal nutrition={recipe.nutrition} servings={recipe.servings} />
-        </RecipeMeta>
+        <div className="mt-4">
+          <RecipeMeta
+            servings={recipe.servings}
+            prepTime={recipe.prepTime}
+            cookTime={recipe.cookTime}
+            source={recipe.source}
+          >
+            <NutritionModal nutrition={recipe.nutrition} servings={recipe.servings} />
+          </RecipeMeta>
+        </div>
       </MotionItem>
 
       {recipe.tags.length > 0 && (
@@ -96,7 +121,6 @@ export default async function RecipePage({
       <MotionItem>
         <RecipeNotes slug={recipe.slug} />
       </MotionItem>
-
     </MotionPage>
   );
 }

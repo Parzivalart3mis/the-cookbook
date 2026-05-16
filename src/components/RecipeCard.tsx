@@ -56,41 +56,55 @@ export default function RecipeCard({
             whileHover={{ y: -6, scale: 1.018 }}
             whileTap={{ scale: 0.97 }}
             transition={{ duration: 0.22, ease: 'easeOut' }}
-            className="h-full rounded-xl border border-border bg-surface-card p-5 shadow-card group-hover:shadow-card-hover group-hover:border-accent/30 transition-[border-color,box-shadow] duration-200"
+            className="h-full rounded-xl border border-border bg-surface-card shadow-card group-hover:shadow-card-hover group-hover:border-accent/30 transition-[border-color,box-shadow] duration-200 overflow-hidden"
           >
-            <h2 className="font-display text-lg font-semibold leading-snug text-ink group-hover:text-accent transition-colors duration-150 mb-3 pr-6">
-              {recipe.name}
-            </h2>
+            {/* Cover image */}
+            {recipe.coverImage && (
+              <div className="w-full h-36 overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={recipe.coverImage}
+                  alt={recipe.name}
+                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                />
+              </div>
+            )}
 
-            <div className="flex items-center justify-between gap-3 mt-auto flex-wrap">
-              <div className="flex items-center gap-3">
-                {recipe.servings !== null && (
-                  <span className="text-xs text-ink-muted tabular-nums">
-                    {recipe.servings} {recipe.servings === 1 ? 'serving' : 'servings'}
-                  </span>
-                )}
-                {totalTime !== null && (
-                  <span className="flex items-center gap-1 text-xs text-ink-muted tabular-nums">
-                    <Clock size={11} className="text-accent" />
-                    {formatTime(totalTime)}
-                  </span>
+            <div className="p-5">
+              <h2 className="font-display text-lg font-semibold leading-snug text-ink group-hover:text-accent transition-colors duration-150 mb-3 pr-6">
+                {recipe.name}
+              </h2>
+
+              <div className="flex items-center justify-between gap-3 mt-auto flex-wrap">
+                <div className="flex items-center gap-3">
+                  {recipe.servings !== null && (
+                    <span className="text-xs text-ink-muted tabular-nums">
+                      {recipe.servings} {recipe.servings === 1 ? 'serving' : 'servings'}
+                    </span>
+                  )}
+                  {totalTime !== null && (
+                    <span className="flex items-center gap-1 text-xs text-ink-muted tabular-nums">
+                      <Clock size={11} className="text-accent" />
+                      {formatTime(totalTime)}
+                    </span>
+                  )}
+                </div>
+
+                {recipe.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 ml-auto">
+                    {recipe.tags.map((tag) => (
+                      <motion.span
+                        key={tag}
+                        whileHover={{ scale: 1.1 }}
+                        transition={{ duration: 0.15 }}
+                        className="inline-block cursor-default rounded-full bg-tag-bg px-2.5 py-0.5 text-xs font-medium text-tag-text"
+                      >
+                        {tag}
+                      </motion.span>
+                    ))}
+                  </div>
                 )}
               </div>
-
-              {recipe.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 ml-auto">
-                  {recipe.tags.map((tag) => (
-                    <motion.span
-                      key={tag}
-                      whileHover={{ scale: 1.1 }}
-                      transition={{ duration: 0.15 }}
-                      className="inline-block cursor-default rounded-full bg-tag-bg px-2.5 py-0.5 text-xs font-medium text-tag-text"
-                    >
-                      {tag}
-                    </motion.span>
-                  ))}
-                </div>
-              )}
             </div>
           </motion.article>
         </Link>
@@ -99,7 +113,9 @@ export default function RecipeCard({
           <button
             onClick={handleQueue}
             title={inQueue ? 'Remove from queue' : 'Add to this week'}
-            className={`absolute top-3 right-3 z-10 p-1.5 rounded-lg border transition-colors duration-150 ${
+            className={`absolute z-10 p-1.5 rounded-lg border transition-colors duration-150 ${
+              recipe.coverImage ? 'top-2 right-2' : 'top-3 right-3'
+            } ${
               inQueue
                 ? 'border-accent/50 bg-accent-light text-accent'
                 : 'border-border bg-surface-card text-ink-faint hover:border-accent/30 hover:text-accent'
