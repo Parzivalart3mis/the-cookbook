@@ -172,12 +172,14 @@ export default function RecipeBody({
                     return (
                       <div
                         key={item.id}
-                        onClick={() => toggle(item.id)}
-                        className="flex items-start gap-2.5 cursor-pointer select-none group"
+                        className="flex items-start gap-2.5 group"
                       >
-                        <span className={`mt-[2px] flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border-2 transition-all duration-150 ${
-                          isChecked ? 'border-accent bg-accent' : 'border-border group-hover:border-accent/60'
-                        }`}>
+                        <span
+                          onClick={() => toggle(item.id)}
+                          className={`mt-[2px] flex h-[18px] w-[18px] shrink-0 cursor-pointer items-center justify-center rounded border-2 transition-all duration-150 ${
+                            isChecked ? 'border-accent bg-accent' : 'border-border group-hover:border-accent/60'
+                          }`}
+                        >
                           {isChecked && <Check size={11} className="text-white" strokeWidth={3} />}
                         </span>
                         <span className={`text-sm leading-relaxed transition-all duration-200 ${
@@ -199,13 +201,21 @@ export default function RecipeBody({
                   return (
                     <li
                       key={item.id}
-                      onClick={() => toggle(item.id)}
-                      className="cursor-pointer select-none transition-opacity duration-200"
+                      className="transition-opacity duration-200"
                       style={{ opacity: isChecked ? 0.35 : 1 }}
                     >
                       <span className={isChecked ? 'line-through' : ''}>
                         {renderRichText(getBlockRichText(item))}
                       </span>
+                      <button
+                        onClick={() => toggle(item.id)}
+                        title={isChecked ? 'Uncheck' : 'Check off'}
+                        className={`ml-2 inline-flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded border-2 transition-all duration-150 align-middle ${
+                          isChecked ? 'border-accent bg-accent' : 'border-border hover:border-accent/60'
+                        }`}
+                      >
+                        {isChecked && <Check size={9} className="text-white" strokeWidth={3} />}
+                      </button>
                     </li>
                   );
                 })}
