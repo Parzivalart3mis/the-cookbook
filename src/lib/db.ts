@@ -4,7 +4,7 @@ let _db: Client | null = null;
 
 export function getDb(): Client {
   if (!_db) {
-    // Use https:// in serverless (Vercel) — libsql:// WebSocket is unreliable there
+    // Use https:// — libsql:// WebSocket is unreliable in Vercel serverless
     const url = (process.env.TURSO_DATABASE_URL ?? '').replace(/^libsql:\/\//, 'https://');
     _db = createClient({
       url,
@@ -14,9 +14,13 @@ export function getDb(): Client {
   return _db;
 }
 
-// Proxy so existing `db.execute(...)` calls continue to work unchanged
+// Proxy so existing `db.execute(...)` calls continue to work unchanged.
+// Bind each method to the real client so `this` is correct inside execute/batch/etc.
 export const db = new Proxy({} as Client, {
   get(_, prop: string) {
-    return getDb()[prop as keyof Client];
+    const client = getDb();
+    const value = client[prop as keyof Client];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return typeof value === 'function' ? (value as any).bind(client) : value;
   },
 });
