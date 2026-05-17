@@ -8,7 +8,7 @@ import ReadingProgress from '@/components/ReadingProgress';
 import RecipeBody from '@/components/RecipeBody';
 import RecipeActions from '@/components/RecipeActions';
 import RecipeNotes from '@/components/RecipeNotes';
-import RecipeImageManager from '@/components/RecipeImageManager';
+import RecipeImageSection from '@/components/RecipeImageSection';
 
 export const revalidate = 60;
 
@@ -46,42 +46,30 @@ export default async function RecipePage({
       <ReadingProgress />
       <BackLink />
 
-      {/* Hero image */}
-      {recipe.coverImage && (
-        <MotionItem>
-          <div className="mb-6 -mt-2 rounded-2xl overflow-hidden aspect-video w-full">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={recipe.coverImage}
-              alt={recipe.name}
-              className="w-full h-full object-cover"
-            />
-          </div>
-        </MotionItem>
-      )}
-
+      {/* Hero image + image manager (client component for instant updates) */}
       <MotionItem>
-        <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight text-ink leading-tight mb-2">
-          {recipe.name}
-        </h1>
-        <RecipeImageManager
+        <RecipeImageSection
           pageId={recipe.id}
           recipeName={recipe.name}
-          hasImage={!!recipe.coverImage}
+          initialImage={recipe.coverImage}
         />
       </MotionItem>
 
       <MotionItem>
-        <div className="mt-4">
-          <RecipeMeta
-            servings={recipe.servings}
-            prepTime={recipe.prepTime}
-            cookTime={recipe.cookTime}
-            source={recipe.source}
-          >
-            <NutritionModal nutrition={recipe.nutrition} servings={recipe.servings} />
-          </RecipeMeta>
-        </div>
+        <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight text-ink leading-tight mb-4">
+          {recipe.name}
+        </h1>
+      </MotionItem>
+
+      <MotionItem>
+        <RecipeMeta
+          servings={recipe.servings}
+          prepTime={recipe.prepTime}
+          cookTime={recipe.cookTime}
+          source={recipe.source}
+        >
+          <NutritionModal nutrition={recipe.nutrition} servings={recipe.servings} />
+        </RecipeMeta>
       </MotionItem>
 
       {recipe.tags.length > 0 && (
