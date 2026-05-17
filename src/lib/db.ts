@@ -4,8 +4,10 @@ let _db: Client | null = null;
 
 export function getDb(): Client {
   if (!_db) {
+    // Use https:// in serverless (Vercel) — libsql:// WebSocket is unreliable there
+    const url = (process.env.TURSO_DATABASE_URL ?? '').replace(/^libsql:\/\//, 'https://');
     _db = createClient({
-      url: process.env.TURSO_DATABASE_URL!,
+      url,
       authToken: process.env.TURSO_AUTH_TOKEN!,
     });
   }

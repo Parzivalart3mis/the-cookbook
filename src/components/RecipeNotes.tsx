@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { StickyNote, ChevronDown } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { StickyNote, ChevronDown, Save } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@clerk/nextjs';
 
@@ -24,24 +24,32 @@ export default function RecipeNotes({ slug }: { slug: string }) {
       .catch(() => {});
   }, [slug, isSignedIn, authLoaded]);
 
+  const doSave = useCallback(async (val: string) => {
+    setSaveStatus('saving');
+    try {
+      const res = await fetch(`/api/notes/${slug}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: val }),
+      });
+      if (!res.ok) throw new Error();
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch {
+      setSaveStatus('error');
+    }
+  }, [slug]);
+
   function handleChange(val: string) {
     setText(val);
     setSaveStatus('saving');
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/notes/${slug}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: val }),
-        });
-        if (!res.ok) throw new Error();
-        setSaveStatus('saved');
-        setTimeout(() => setSaveStatus('idle'), 2000);
-      } catch {
-        setSaveStatus('error');
-      }
-    }, 500);
+    timerRef.current = setTimeout(() => doSave(val), 1000);
+  }
+
+  function handleSaveClick() {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    doSave(text);
   }
 
   if (!isSignedIn) return null;
@@ -74,11 +82,21 @@ export default function RecipeNotes({ slug }: { slug: string }) {
               placeholder="Next time use less salt… family loved this… try with sourdough…"
               className="w-full h-28 rounded-lg border border-border bg-surface-card px-3 py-2.5 text-sm text-ink placeholder:text-ink-faint resize-none focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-colors"
             />
-            <div className="flex items-center justify-between mt-1">
+            <div className="flex items-center justify-between mt-2">
               <span className="text-xs text-ink-faint">{text.length} chars</span>
-              {saveStatus === 'saving' && <span className="text-xs text-ink-faint">Saving…</span>}
-              {saveStatus === 'saved'  && <span className="text-xs text-green-500">Saved ✓</span>}
-              {saveStatus === 'error'  && <span className="text-xs text-red-500">Failed to save</span>}
+              <div className="flex items-center gap-3">
+                {saveStatus === 'saving' && <span className="text-xs text-ink-faint">Saving…</span>}
+                {saveStatus === 'saved'  && <span className="text-xs text-green-500">Saved ✓</span>}
+                {saveStatus === 'error'  && <span className="text-xs text-red-500">Failed to save</span>}
+                <button
+                  onClick={handleSaveClick}
+                  disabled={saveStatus === 'saving'}
+                  className="flex items-center gap-1.5 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 py-1.5 text-xs font-medium transition-colors"
+                >
+                  <Save size={11} />
+                  Save
+                </button>
+              </div>
             </div>
           </motion.div>
         )}
