@@ -11,6 +11,8 @@ export default function RecipeNotes({ slug }: { slug: string }) {
   const [text, setText] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track latest text in a ref so handleSaveClick always uses current value
+  const textRef = useRef('');
 
   useEffect(() => {
     if (!authLoaded || !isSignedIn) return;
@@ -19,6 +21,7 @@ export default function RecipeNotes({ slug }: { slug: string }) {
       .then(data => {
         const t = data.text ?? '';
         setText(t);
+        textRef.current = t;
         if (t.trim()) setOpen(true);
       })
       .catch(() => {});
@@ -42,14 +45,13 @@ export default function RecipeNotes({ slug }: { slug: string }) {
 
   function handleChange(val: string) {
     setText(val);
-    setSaveStatus('saving');
+    textRef.current = val;
+    if (saveStatus !== 'idle') setSaveStatus('idle');
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => doSave(val), 1000);
   }
 
   function handleSaveClick() {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    doSave(text);
+    doSave(textRef.current);
   }
 
   if (!isSignedIn) return null;
