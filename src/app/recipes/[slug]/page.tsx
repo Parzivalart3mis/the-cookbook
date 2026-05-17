@@ -50,6 +50,7 @@ export default async function RecipePage({
       <MotionItem>
         <RecipeImageSection
           pageId={recipe.id}
+          slug={recipe.slug}
           recipeName={recipe.name}
           initialImage={recipe.coverImage}
         />

@@ -15,10 +15,12 @@ type Photo = {
 
 export default function RecipeImageSection({
   pageId,
+  slug,
   recipeName,
   initialImage,
 }: {
   pageId: string;
+  slug: string;
   recipeName: string;
   initialImage: string | null;
 }) {
@@ -64,7 +66,7 @@ export default function RecipeImageSection({
       const res = await fetch('/api/recipe-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pageId, imageUrl, downloadLocation }),
+        body: JSON.stringify({ pageId, imageUrl, downloadLocation, slug }),
       });
 
       if (!res.ok) {
