@@ -13,6 +13,11 @@ import RecentlyViewedShelf from './RecentlyViewedShelf';
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
+const ALL_MEAL_TYPES = [
+  'Breakfast', 'Lunch', 'Dinner', 'Meal Prep',
+  'Snack', 'Dessert', 'Drink', 'Side Dish',
+];
+
 const SERVING_BUCKETS = [
   { label: '1–2', test: (n: number) => n <= 2 },
   { label: '3–4', test: (n: number) => n >= 3 && n <= 4 },
@@ -93,18 +98,42 @@ export default function RecipeSearch({
   recipes: RecipeSummary[];
   initialTag?: string;
 }) {
-  const [query, setQuery]             = useState('');
-  const [selectedTags, setSelectedTags] = useState<Set<string>>(initialTag ? new Set([initialTag]) : new Set());
-  const [servingBucket, setServingBucket] = useState<string | null>(null);
+  const [query, setQuery]                   = useState('');
+  const [selectedTags, setSelectedTags]     = useState<Set<string>>(initialTag ? new Set([initialTag]) : new Set());
+  const [selectedMeals, setSelectedMeals]   = useState<Set<string>>(new Set());
+  const [servingBucket, setServingBucket]   = useState<string | null>(null);
   const [nutritionFilter, setNutritionFilter] = useState<string | null>(null);
-  const [openDropdown, setOpenDropdown] = useState<'tags' | 'serves' | 'nutrition' | null>(null);
+  const [openDropdown, setOpenDropdown]     = useState<'tags' | 'meal' | 'serves' | 'nutrition' | null>(null);
   const [activeCollection, setActiveCollection] = useState<string | null>(initialTag ?? null);
+  const [surpriseOpen, setSurpriseOpen]     = useState(false);
+  const [surpriseMsg, setSurpriseMsg]       = useState<string | null>(null);
+  const surpriseRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+
+  // Close surprise picker on outside click
+  useEffect(() => {
+    if (!surpriseOpen) return;
+    function h(e: MouseEvent) {
+      if (surpriseRef.current && !surpriseRef.current.contains(e.target as Node)) {
+        setSurpriseOpen(false);
+        setSurpriseMsg(null);
+      }
+    }
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [surpriseOpen]);
 
   const allTags = useMemo(() => {
     const tags = new Set<string>();
     recipes.forEach(r => r.tags.forEach(t => tags.add(t)));
     return [...tags].sort();
+  }, [recipes]);
+
+  // Count recipes per meal type
+  const mealTypeCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    recipes.forEach(r => r.mealTypes.forEach(mt => counts.set(mt, (counts.get(mt) ?? 0) + 1)));
+    return counts;
   }, [recipes]);
 
   const topCollections = useMemo(() => {
@@ -118,7 +147,7 @@ export default function RecipeSearch({
 
   const showServings    = recipes.some(r => r.servings !== null);
   const hasNutrition    = recipes.some(r => Object.values(r.nutrition).some(v => v !== null));
-  const hasActiveFilters = selectedTags.size > 0 || servingBucket !== null || nutritionFilter !== null;
+  const hasActiveFilters = selectedTags.size > 0 || selectedMeals.size > 0 || servingBucket !== null || nutritionFilter !== null;
   const hasQuery        = query.trim().length > 0;
 
   const filtered = useMemo(() => {
@@ -127,11 +156,15 @@ export default function RecipeSearch({
     const q = query.trim().toLowerCase();
     if (q) result = result.filter(r =>
       r.name.toLowerCase().includes(q) ||
-      r.tags.some(t => t.toLowerCase().includes(q))
+      r.tags.some(t => t.toLowerCase().includes(q)) ||
+      r.mealTypes.some(mt => mt.toLowerCase().includes(q))
     );
 
     if (selectedTags.size > 0)
       result = result.filter(r => [...selectedTags].every(t => r.tags.includes(t)));
+
+    if (selectedMeals.size > 0)
+      result = result.filter(r => [...selectedMeals].some(mt => r.mealTypes.includes(mt)));
 
     if (servingBucket) {
       const bucket = SERVING_BUCKETS.find(b => b.label === servingBucket);
@@ -144,13 +177,21 @@ export default function RecipeSearch({
     }
 
     return result;
-  }, [recipes, query, selectedTags, servingBucket, nutritionFilter]);
+  }, [recipes, query, selectedTags, selectedMeals, servingBucket, nutritionFilter]);
 
   function toggleTag(tag: string) {
     setActiveCollection(null);
     setSelectedTags(prev => {
       const next = new Set(prev);
       next.has(tag) ? next.delete(tag) : next.add(tag);
+      return next;
+    });
+  }
+
+  function toggleMeal(mt: string) {
+    setSelectedMeals(prev => {
+      const next = new Set(prev);
+      next.has(mt) ? next.delete(mt) : next.add(mt);
       return next;
     });
   }
@@ -162,14 +203,21 @@ export default function RecipeSearch({
 
   function clearFilters() {
     setSelectedTags(new Set());
+    setSelectedMeals(new Set());
     setServingBucket(null);
     setNutritionFilter(null);
     setActiveCollection(null);
   }
 
-  function surpriseMe() {
-    if (recipes.length === 0) return;
-    const pick = recipes[Math.floor(Math.random() * recipes.length)];
+  function handleSurpriseMe(mealType: string) {
+    const pool = recipes.filter(r => r.mealTypes.includes(mealType));
+    if (pool.length === 0) {
+      setSurpriseMsg(`No recipes tagged as "${mealType}" yet — add the Meal Type in Notion first.`);
+      return;
+    }
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    setSurpriseOpen(false);
+    setSurpriseMsg(null);
     router.push(`/recipes/${pick.slug}`);
   }
 
@@ -217,14 +265,59 @@ export default function RecipeSearch({
             )}
           </AnimatePresence>
         </div>
-        <button
-          onClick={surpriseMe}
-          title="Pick a random recipe"
-          className="flex items-center gap-1.5 rounded-lg border border-border bg-surface-card px-3 py-2 text-sm text-ink-muted hover:border-accent/30 hover:text-ink transition-colors duration-150 shrink-0"
-        >
-          <Wand2 size={14} />
-          Surprise me
-        </button>
+
+        {/* Surprise Me with meal picker */}
+        <div ref={surpriseRef} className="relative shrink-0">
+          <button
+            onClick={() => { setSurpriseOpen(o => !o); setSurpriseMsg(null); }}
+            title="Get a surprise recipe for a meal"
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface-card px-3 py-2 text-sm text-ink-muted hover:border-accent/30 hover:text-ink transition-colors duration-150"
+          >
+            <Wand2 size={14} />
+            Surprise me
+          </button>
+
+          <AnimatePresence>
+            {surpriseOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                transition={{ duration: 0.18, ease }}
+                className="absolute right-0 top-full z-50 mt-2 w-56 rounded-xl border border-border bg-surface-card shadow-card-hover"
+              >
+                <div className="px-3 pt-3 pb-1">
+                  <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Which meal?</p>
+                </div>
+                <div className="p-1.5 flex flex-col gap-0.5">
+                  {ALL_MEAL_TYPES.map(mt => {
+                    const count = mealTypeCounts.get(mt) ?? 0;
+                    return (
+                      <button
+                        key={mt}
+                        onClick={() => handleSurpriseMe(mt)}
+                        className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-ink hover:bg-surface-hover transition-colors duration-100"
+                      >
+                        <span>{mt}</span>
+                        <span className={cn(
+                          'text-xs tabular-nums',
+                          count > 0 ? 'text-ink-faint' : 'text-ink-faint/40'
+                        )}>
+                          {count > 0 ? `${count} recipe${count !== 1 ? 's' : ''}` : 'none yet'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {surpriseMsg && (
+                  <div className="mx-1.5 mb-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                    {surpriseMsg}
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </motion.div>
 
       {/* Filter row */}
@@ -234,6 +327,38 @@ export default function RecipeSearch({
         transition={{ duration: 0.4, delay: 0.08, ease }}
         className="mb-6 flex flex-wrap items-center gap-2"
       >
+        {/* Meal Type */}
+        <FilterDropdown
+          label="Meal"
+          badge={selectedMeals.size || undefined}
+          open={openDropdown === 'meal'}
+          onToggle={() => setOpenDropdown(o => o === 'meal' ? null : 'meal')}
+          onClose={closeDropdown}
+        >
+          <div className="p-1.5 flex flex-col gap-0.5">
+            {ALL_MEAL_TYPES.map(mt => {
+              const active = selectedMeals.has(mt);
+              const count = mealTypeCounts.get(mt) ?? 0;
+              return (
+                <button
+                  key={mt}
+                  onClick={() => toggleMeal(mt)}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink hover:bg-surface-hover transition-colors duration-100"
+                >
+                  <span className={cn(
+                    'flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors duration-150',
+                    active ? 'border-accent bg-accent' : 'border-border bg-surface'
+                  )}>
+                    {active && <Check size={10} className="text-white" strokeWidth={3} />}
+                  </span>
+                  <span className="flex-1 text-left">{mt}</span>
+                  {count > 0 && <span className="text-xs text-ink-faint tabular-nums">{count}</span>}
+                </button>
+              );
+            })}
+          </div>
+        </FilterDropdown>
+
         {/* Tags */}
         {allTags.length > 0 && (
           <FilterDropdown

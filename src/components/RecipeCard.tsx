@@ -75,6 +75,20 @@ export default function RecipeCard({
                 {recipe.name}
               </h2>
 
+              {/* Meal type badges */}
+              {recipe.mealTypes.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {recipe.mealTypes.map((mt) => (
+                    <span
+                      key={mt}
+                      className="inline-block rounded-full bg-blue-50 dark:bg-blue-950/40 px-2.5 py-0.5 text-xs font-medium text-blue-600 dark:text-blue-400"
+                    >
+                      {mt}
+                    </span>
+                  ))}
+                </div>
+              )}
+
               <div className="flex items-center justify-between gap-3 mt-auto flex-wrap">
                 <div className="flex items-center gap-3">
                   {recipe.servings !== null && (

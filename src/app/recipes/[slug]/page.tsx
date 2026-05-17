@@ -73,9 +73,17 @@ export default async function RecipePage({
         </RecipeMeta>
       </MotionItem>
 
-      {recipe.tags.length > 0 && (
+      {(recipe.mealTypes.length > 0 || recipe.tags.length > 0) && (
         <MotionItem>
           <div className="flex flex-wrap gap-2 mt-3">
+            {recipe.mealTypes.map((mt) => (
+              <span
+                key={mt}
+                className="inline-block rounded-full bg-blue-50 dark:bg-blue-950/40 px-3 py-1 text-xs font-medium text-blue-600 dark:text-blue-400"
+              >
+                {mt}
+              </span>
+            ))}
             {recipe.tags.map((tag) => (
               <Link
                 key={tag}
