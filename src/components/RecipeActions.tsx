@@ -49,8 +49,8 @@ function extractIngredients(blocks: BlockObjectResponse[]): string[] {
   const isList = (block: { type: string }) =>
     block.type === 'bulleted_list_item' || block.type === 'numbered_list_item';
 
+  // 1. Ingredient heading found → collect items under it
   const hasIngredientHeading = b.some(block => isHeading(block) && INGREDIENT_KW.some(k => headingText(block).includes(k)));
-
   if (hasIngredientHeading) {
     let collecting = false;
     const result: string[] = [];
@@ -64,18 +64,20 @@ function extractIngredients(blocks: BlockObjectResponse[]): string[] {
         if (text) result.push(text);
       }
     }
-    return result;
+    if (result.length > 0) return result;
   }
 
+  // 2. No ingredient heading → take all bullets before the instructions heading
   const instructionIdx = b.findIndex(
     block => isHeading(block) && INSTRUCTION_KW.some(k => headingText(block).includes(k))
   );
   const relevantBlocks = instructionIdx === -1 ? b : b.slice(0, instructionIdx);
-
   const bulleted = relevantBlocks.filter((bl: { type: string }) => bl.type === 'bulleted_list_item').map(listText).filter(Boolean);
   if (bulleted.length > 0) return bulleted;
 
-  return relevantBlocks.filter(isList).map(listText).filter(Boolean);
+  // 3. Last resort: grab every bullet in the entire recipe
+  const allBullets = b.filter((bl: { type: string }) => bl.type === 'bulleted_list_item').map(listText).filter(Boolean);
+  return allBullets;
 }
 
 export default function RecipeActions({
@@ -93,6 +95,7 @@ export default function RecipeActions({
 }) {
   const [cookModeOpen, setCookModeOpen] = useState(false);
   const [shoppingDone, setShoppingDone] = useState<boolean | null>(null);
+  const [shoppingError, setShoppingError] = useState(false);
   const { isSignedIn } = useAuth();
   const { addToQueue, removeFromQueue, isInQueue } = useQueue();
   const inQueue = isInQueue(slug);
@@ -115,20 +118,32 @@ export default function RecipeActions({
   }
 
   async function addShopping() {
+    setShoppingError(false);
     const ingredients = extractIngredients(blocks);
+    if (ingredients.length === 0) {
+      setShoppingError(true);
+      setTimeout(() => setShoppingError(false), 4000);
+      return;
+    }
     const items = ingredients.map(text => ({
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       text,
       category: categorize(text),
       recipeName: name,
     }));
-    await fetch('/api/shopping', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items }),
-    });
-    setShoppingDone(true);
-    setTimeout(() => setShoppingDone(null), 3000);
+    try {
+      const res = await fetch('/api/shopping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      });
+      if (!res.ok) throw new Error();
+      setShoppingDone(true);
+      setTimeout(() => setShoppingDone(null), 3000);
+    } catch {
+      setShoppingError(true);
+      setTimeout(() => setShoppingError(false), 4000);
+    }
   }
 
   return (
@@ -165,6 +180,10 @@ export default function RecipeActions({
               <Check size={14} />
               Added · View list
             </Link>
+          ) : shoppingError ? (
+            <span className="flex items-center gap-1.5 rounded-xl border border-red-300 bg-red-50 dark:bg-red-950/30 dark:border-red-800 px-3 py-2 text-sm font-medium text-red-500">
+              No ingredients found
+            </span>
           ) : (
             <button
               onClick={addShopping}

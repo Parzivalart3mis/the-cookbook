@@ -9,7 +9,7 @@ export default function RecipeNotes({ slug }: { slug: string }) {
   const { isSignedIn, isLoaded: authLoaded } = useAuth();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
-  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -19,7 +19,6 @@ export default function RecipeNotes({ slug }: { slug: string }) {
       .then(data => {
         const t = data.text ?? '';
         setText(t);
-        setSavedAt(data.savedAt ?? null);
         if (t.trim()) setOpen(true);
       })
       .catch(() => {});
@@ -27,15 +26,21 @@ export default function RecipeNotes({ slug }: { slug: string }) {
 
   function handleChange(val: string) {
     setText(val);
+    setSaveStatus('saving');
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      fetch(`/api/notes/${slug}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: val }),
-      }).catch(() => {});
-      setSavedAt(now);
+    timerRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/notes/${slug}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: val }),
+        });
+        if (!res.ok) throw new Error();
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus('idle'), 2000);
+      } catch {
+        setSaveStatus('error');
+      }
     }, 500);
   }
 
@@ -71,7 +76,9 @@ export default function RecipeNotes({ slug }: { slug: string }) {
             />
             <div className="flex items-center justify-between mt-1">
               <span className="text-xs text-ink-faint">{text.length} chars</span>
-              {savedAt && <span className="text-xs text-ink-faint">Saved at {savedAt}</span>}
+              {saveStatus === 'saving' && <span className="text-xs text-ink-faint">Saving…</span>}
+              {saveStatus === 'saved'  && <span className="text-xs text-green-500">Saved ✓</span>}
+              {saveStatus === 'error'  && <span className="text-xs text-red-500">Failed to save</span>}
             </div>
           </motion.div>
         )}
