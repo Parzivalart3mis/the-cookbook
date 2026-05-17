@@ -7,9 +7,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { RecipeSummary, Nutrition } from '@/lib/notion';
 import { cn } from '@/lib/cn';
 import RecipeGrid from './RecipeGrid';
-import CollectionShelf from './CollectionShelf';
 import MealQueueShelf from './MealQueueShelf';
-import RecentlyViewedShelf from './RecentlyViewedShelf';
+import RecentlyViewedPopover from './RecentlyViewedPopover';
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -99,12 +98,11 @@ export default function RecipeSearch({
   initialTag?: string;
 }) {
   const [query, setQuery]                   = useState('');
-  const [selectedTags, setSelectedTags]     = useState<Set<string>>(initialTag ? new Set([initialTag]) : new Set());
+  const [selectedTags, setSelectedTags]     = useState<Set<string>>(initialTag ? new Set([initialTag]) : new Set<string>());
   const [selectedMeals, setSelectedMeals]   = useState<Set<string>>(new Set());
   const [servingBucket, setServingBucket]   = useState<string | null>(null);
   const [nutritionFilter, setNutritionFilter] = useState<string | null>(null);
   const [openDropdown, setOpenDropdown]     = useState<'tags' | 'meal' | 'serves' | 'nutrition' | null>(null);
-  const [activeCollection, setActiveCollection] = useState<string | null>(initialTag ?? null);
   const [surpriseOpen, setSurpriseOpen]     = useState(false);
   const [surpriseMsg, setSurpriseMsg]       = useState<string | null>(null);
   const surpriseRef = useRef<HTMLDivElement>(null);
@@ -134,15 +132,6 @@ export default function RecipeSearch({
     const counts = new Map<string, number>();
     recipes.forEach(r => r.mealTypes.forEach(mt => counts.set(mt, (counts.get(mt) ?? 0) + 1)));
     return counts;
-  }, [recipes]);
-
-  const topCollections = useMemo(() => {
-    const counts = new Map<string, number>();
-    recipes.forEach(r => r.tags.forEach(t => counts.set(t, (counts.get(t) ?? 0) + 1)));
-    return [...counts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8)
-      .map(([name, count]) => ({ name, count }));
   }, [recipes]);
 
   const showServings    = recipes.some(r => r.servings !== null);
@@ -180,7 +169,6 @@ export default function RecipeSearch({
   }, [recipes, query, selectedTags, selectedMeals, servingBucket, nutritionFilter]);
 
   function toggleTag(tag: string) {
-    setActiveCollection(null);
     setSelectedTags(prev => {
       const next = new Set(prev);
       next.has(tag) ? next.delete(tag) : next.add(tag);
@@ -196,17 +184,11 @@ export default function RecipeSearch({
     });
   }
 
-  function selectCollection(tag: string | null) {
-    setActiveCollection(tag);
-    setSelectedTags(tag ? new Set([tag]) : new Set());
-  }
-
   function clearFilters() {
     setSelectedTags(new Set());
     setSelectedMeals(new Set());
     setServingBucket(null);
     setNutritionFilter(null);
-    setActiveCollection(null);
   }
 
   function handleSurpriseMe(mealType: string) {
@@ -227,13 +209,8 @@ export default function RecipeSearch({
   return (
     <div>
       <MealQueueShelf />
-      <RecentlyViewedShelf />
 
-      {topCollections.length > 0 && (
-        <CollectionShelf tags={topCollections} selected={activeCollection} onSelect={selectCollection} />
-      )}
-
-      {/* Search bar + Surprise Me */}
+      {/* Search bar + Surprise Me + History */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -265,6 +242,8 @@ export default function RecipeSearch({
             )}
           </AnimatePresence>
         </div>
+
+        <RecentlyViewedPopover />
 
         {/* Surprise Me with meal picker */}
         <div ref={surpriseRef} className="relative shrink-0">
