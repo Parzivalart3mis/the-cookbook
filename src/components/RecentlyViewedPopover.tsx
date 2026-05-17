@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { History } from 'lucide-react';
+import { History, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/cn';
 
@@ -13,7 +13,6 @@ type ViewedItem = { slug: string; name: string };
 export default function RecentlyViewedPopover() {
   const [items, setItems] = useState<ViewedItem[]>([]);
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     try {
@@ -22,24 +21,15 @@ export default function RecentlyViewedPopover() {
     } catch {}
   }, []);
 
-  useEffect(() => {
-    if (!open) return;
-    function h(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [open]);
-
   if (items.length === 0) return null;
 
   return (
-    <div ref={ref} className="relative shrink-0">
+    <>
       <button
-        onClick={() => setOpen(o => !o)}
+        onClick={() => setOpen(true)}
         title="Recently viewed"
         className={cn(
-          'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-colors duration-150',
+          'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-colors duration-150 shrink-0',
           open
             ? 'border-accent/50 bg-accent-light text-accent'
             : 'border-border bg-surface-card text-ink-muted hover:border-accent/30 hover:text-ink'
@@ -50,31 +40,59 @@ export default function RecentlyViewedPopover() {
 
       <AnimatePresence>
         {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -6, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -6, scale: 0.97 }}
-            transition={{ duration: 0.18, ease }}
-            className="absolute right-0 top-full z-50 mt-2 w-64 rounded-xl border border-border bg-surface-card shadow-card-hover"
-          >
-            <div className="px-3 pt-3 pb-1">
-              <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Recently Viewed</p>
-            </div>
-            <div className="p-1.5 flex flex-col gap-0.5 max-h-72 overflow-y-auto">
-              {items.map(item => (
-                <Link
-                  key={item.slug}
-                  href={`/recipes/${item.slug}`}
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setOpen(false)}
+            />
+
+            {/* Modal card */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 12 }}
+              transition={{ duration: 0.22, ease }}
+              className="relative w-full max-w-sm bg-surface rounded-2xl shadow-2xl overflow-hidden"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+                <div className="flex items-center gap-2">
+                  <History size={15} className="text-accent" />
+                  <h3 className="font-semibold text-ink">Recently Viewed</h3>
+                </div>
+                <button
                   onClick={() => setOpen(false)}
-                  className="block rounded-lg px-3 py-2 text-sm text-ink hover:bg-surface-hover transition-colors duration-100 truncate"
+                  className="p-1.5 rounded-lg text-ink-faint hover:text-ink hover:bg-surface-hover transition-colors"
                 >
-                  {item.name}
-                </Link>
-              ))}
-            </div>
-          </motion.div>
+                  <X size={15} />
+                </button>
+              </div>
+
+              {/* List */}
+              <div className="p-2 flex flex-col gap-0.5 max-h-80 overflow-y-auto">
+                {items.map((item, i) => (
+                  <Link
+                    key={item.slug}
+                    href={`/recipes/${item.slug}`}
+                    onClick={() => setOpen(false)}
+                    className="flex items-center gap-3 rounded-xl px-4 py-3 hover:bg-surface-hover transition-colors duration-100 group"
+                  >
+                    <span className="text-xs tabular-nums text-ink-faint w-4 shrink-0">{i + 1}</span>
+                    <span className="text-sm text-ink group-hover:text-accent transition-colors duration-100 truncate">
+                      {item.name}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
-    </div>
+    </>
   );
 }
