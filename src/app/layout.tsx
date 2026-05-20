@@ -4,6 +4,7 @@ import { ClerkProvider } from '@clerk/nextjs';
 import './globals.css';
 import SiteHeader from '@/components/SiteHeader';
 import { QueueProvider } from '@/components/QueueProvider';
+import WakeLock from '@/components/WakeLock';
 
 const fraunces = Fraunces({
   subsets: ['latin'],
@@ -64,6 +65,7 @@ export default function RootLayout({
         </head>
         <body className="min-h-screen flex flex-col antialiased">
           <QueueProvider>
+            <WakeLock />
             <SiteHeader />
             <main className="flex-1">{children}</main>
             <footer className="border-t border-border py-6 mt-16">

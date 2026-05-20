@@ -2,10 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { UtensilsCrossed, Bookmark, BookmarkCheck, ShoppingCart, Check } from 'lucide-react';
-import { AnimatePresence } from 'framer-motion';
+import { Bookmark, BookmarkCheck, ShoppingCart, Check } from 'lucide-react';
 import type { BlockObjectResponse } from '@notionhq/client/build/src/api-endpoints';
-import CookMode from './CookMode';
 import { useQueue } from './QueueProvider';
 import { useAuth } from '@clerk/nextjs';
 
@@ -93,7 +91,6 @@ export default function RecipeActions({
   prepTime: number | null;
   cookTime: number | null;
 }) {
-  const [cookModeOpen, setCookModeOpen] = useState(false);
   const [shoppingDone, setShoppingDone] = useState<boolean | null>(null);
   const [shoppingError, setShoppingError] = useState(false);
   const { isSignedIn } = useAuth();
@@ -149,14 +146,6 @@ export default function RecipeActions({
   return (
     <>
       <div className="flex items-center gap-2 flex-wrap mt-4">
-        <button
-          onClick={() => setCookModeOpen(true)}
-          className="flex items-center gap-1.5 rounded-xl bg-accent hover:bg-accent-hover text-white px-4 py-2 text-sm font-semibold transition-colors duration-150"
-        >
-          <UtensilsCrossed size={14} />
-          Cook Mode
-        </button>
-
         {isSignedIn && (
           <button
             onClick={toggleQueue}
@@ -196,17 +185,6 @@ export default function RecipeActions({
         )}
       </div>
 
-      <AnimatePresence>
-        {cookModeOpen && (
-          <CookMode
-            blocks={blocks}
-            recipeName={name}
-            prepTime={prepTime}
-            cookTime={cookTime}
-            onClose={() => setCookModeOpen(false)}
-          />
-        )}
-      </AnimatePresence>
     </>
   );
 }
