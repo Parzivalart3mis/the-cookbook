@@ -7,6 +7,7 @@ import type { BlockObjectResponse } from '@notionhq/client/build/src/api-endpoin
 import { useQueue } from './QueueProvider';
 import { useAuth } from '@clerk/nextjs';
 import MarkCookedButton from './MarkCookedButton';
+import IngredientSubstitution from './IngredientSubstitution';
 import { extractIngredients, categorize } from '@/lib/ingredients';
 
 export default function RecipeActions({
@@ -117,6 +118,7 @@ export default function RecipeActions({
         )}
       </div>
 
+      {isSignedIn && <IngredientSubstitution recipeName={name} />}
     </>
   );
 }
