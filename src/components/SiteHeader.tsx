@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ChefHat, ShoppingCart, CalendarDays } from 'lucide-react';
+import { ChefHat, ShoppingCart, CalendarDays, CalendarRange } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
 import HeaderAuthArea from './HeaderAuthArea';
 
@@ -16,6 +16,13 @@ export default function SiteHeader() {
         </Link>
 
         <div className="flex items-center gap-1">
+          <Link
+            href="/meal-plan"
+            title="Meal Planner"
+            className="p-2 rounded-lg text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors duration-150"
+          >
+            <CalendarRange size={18} />
+          </Link>
           <Link
             href="/timeline"
             title="Timeline"

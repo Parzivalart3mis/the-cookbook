@@ -9,6 +9,8 @@ import RecipeBody from '@/components/RecipeBody';
 import RecipeActions from '@/components/RecipeActions';
 import RecipeNotes from '@/components/RecipeNotes';
 import RecipeImageSection from '@/components/RecipeImageSection';
+import VoiceAssistant from '@/components/VoiceAssistant';
+import IngredientSubstitution from '@/components/IngredientSubstitution';
 
 export const revalidate = 60;
 
@@ -116,8 +118,14 @@ export default async function RecipePage({
       </MotionItem>
 
       <MotionItem>
+        <IngredientSubstitution recipeName={recipe.name} />
+      </MotionItem>
+
+      <MotionItem>
         <RecipeNotes slug={recipe.slug} />
       </MotionItem>
+
+      <VoiceAssistant blocks={recipe.blocks} recipeName={recipe.name} />
     </MotionPage>
   );
 }
