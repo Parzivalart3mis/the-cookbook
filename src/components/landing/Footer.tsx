@@ -8,7 +8,7 @@ const LINKS: { heading: string; items: { label: string; href: string }[] }[] = [
   {
     heading: 'Cook',
     items: [
-      { label: 'All recipes', href: '/' },
+      { label: 'All recipes', href: '/recipes' },
       { label: 'Meal planner', href: '/meal-plan' },
       { label: 'Shopping list', href: '/shopping-list' },
     ],

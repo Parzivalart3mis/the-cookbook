@@ -8,7 +8,7 @@ import { EASE } from './primitives';
 
 const NAV_LINKS = [
   { label: 'Features', href: '#features' },
-  { label: 'Recipes', href: '/' },
+  { label: 'Recipes', href: '/recipes' },
   { label: 'Meal plan', href: '/meal-plan' },
 ];
 
@@ -59,7 +59,7 @@ export default function Nav() {
         </div>
 
         <Link
-          href="/"
+          href="/recipes"
           className="group flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--l-line-strong)] bg-[var(--l-raise)]/60 px-4 py-2 text-xs font-medium text-[var(--l-text)] backdrop-blur-md transition-colors duration-300 hover:border-[var(--l-ember)]/50 hover:bg-[var(--l-raise)]"
         >
           Open app

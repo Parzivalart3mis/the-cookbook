@@ -50,7 +50,7 @@ export default function CallToAction({ recipeCount }: { recipeCount: number }) {
                 <div className="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
                   <Magnetic>
                     <Link
-                      href="/"
+                      href="/recipes"
                       className="group relative inline-flex items-center gap-2.5 overflow-hidden rounded-full bg-gradient-to-r from-[var(--l-ember-hot)] to-[var(--l-plasma)] px-9 py-4 text-sm font-semibold text-[#1a0f02] shadow-[0_0_46px_-8px_rgba(245,158,11,0.7)] transition-shadow duration-300 hover:shadow-[0_0_70px_-6px_rgba(245,158,11,0.9)]"
                     >
                       <span

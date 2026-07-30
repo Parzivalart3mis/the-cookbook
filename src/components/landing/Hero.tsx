@@ -162,7 +162,7 @@ export default function Hero({
         >
           <Magnetic>
             <Link
-              href="/"
+              href="/recipes"
               className="group relative inline-flex items-center gap-2.5 overflow-hidden rounded-full bg-gradient-to-r from-[var(--l-ember-hot)] to-[var(--l-plasma)] px-8 py-4 text-sm font-semibold text-[#1a0f02] shadow-[0_0_40px_-8px_rgba(245,158,11,0.65)] transition-shadow duration-300 hover:shadow-[0_0_60px_-6px_rgba(245,158,11,0.85)]"
             >
               {/* Sheen sweep on hover */}
