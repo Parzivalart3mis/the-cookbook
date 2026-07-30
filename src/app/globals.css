@@ -119,6 +119,81 @@ body {
   letter-spacing: -0.01em;
 }
 
+/* ─── Landing page (/welcome) — cinematic, self-contained ─── */
+/* Scoped tokens so the landing keeps its art direction in either theme. */
+.landing {
+  --l-void: #0a0705;
+  --l-deep: #14100c;
+  --l-raise: #1d1712;
+  --l-line: rgba(255, 226, 183, 0.1);
+  --l-line-strong: rgba(255, 226, 183, 0.2);
+  --l-text: #faf6f1;
+  --l-text-muted: #b8aa9a;
+  --l-text-faint: #7d7167;
+  --l-ember: #f59e0b;
+  --l-ember-hot: #fbbf24;
+  --l-ember-deep: #b45309;
+  --l-plasma: #f97316;
+}
+
+@keyframes landing-aurora {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.55;
+  }
+  33% {
+    transform: translate3d(6%, -4%, 0) scale(1.15);
+    opacity: 0.75;
+  }
+  66% {
+    transform: translate3d(-5%, 5%, 0) scale(1.05);
+    opacity: 0.6;
+  }
+}
+
+@keyframes landing-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes landing-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+@keyframes landing-scan {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(400%);
+  }
+}
+
+@keyframes landing-pulse-ring {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.5;
+  }
+  70% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 /* ─── Reduced motion ─── */
 @media (prefers-reduced-motion: reduce) {
   *,

@@ -5,6 +5,7 @@ import './globals.css';
 import SiteHeader from '@/components/SiteHeader';
 import { QueueProvider } from '@/components/QueueProvider';
 import WakeLock from '@/components/WakeLock';
+import ChromeGate from '@/components/ChromeGate';
 
 const fraunces = Fraunces({
   subsets: ['latin'],
@@ -66,13 +67,17 @@ export default function RootLayout({
         <body className="min-h-screen flex flex-col antialiased">
           <QueueProvider>
             <WakeLock />
-            <SiteHeader />
+            <ChromeGate>
+              <SiteHeader />
+            </ChromeGate>
             <main className="flex-1">{children}</main>
-            <footer className="border-t border-border py-6 mt-16">
-              <div className="mx-auto max-w-5xl px-4 sm:px-6 text-xs text-ink-faint text-center">
-                The Cookbook — pulled fresh from Notion
-              </div>
-            </footer>
+            <ChromeGate>
+              <footer className="border-t border-border py-6 mt-16">
+                <div className="mx-auto max-w-5xl px-4 sm:px-6 text-xs text-ink-faint text-center">
+                  The Cookbook — pulled fresh from Notion
+                </div>
+              </footer>
+            </ChromeGate>
           </QueueProvider>
         </body>
       </html>
