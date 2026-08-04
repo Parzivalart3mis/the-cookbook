@@ -5,6 +5,7 @@ import './globals.css';
 import SiteHeader from '@/components/SiteHeader';
 import { QueueProvider } from '@/components/QueueProvider';
 import WakeLock from '@/components/WakeLock';
+import WakeLockDebug from '@/components/WakeLockDebug';
 import ChromeGate from '@/components/ChromeGate';
 
 const fraunces = Fraunces({
@@ -67,6 +68,7 @@ export default function RootLayout({
         <body className="min-h-screen flex flex-col antialiased">
           <QueueProvider>
             <WakeLock />
+            <WakeLockDebug />
             <ChromeGate>
               <SiteHeader />
             </ChromeGate>
