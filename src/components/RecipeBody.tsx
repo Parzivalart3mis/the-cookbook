@@ -90,27 +90,43 @@ export default function RecipeBody({
 
   useEffect(() => {
     if (!slug || !authLoaded) return;
-    if (isSignedIn) {
-      fetch(`/api/checklist/${slug}`)
-        .then(r => r.json())
-        .then(data => {
-          if (Array.isArray(data.itemIds)) setChecked(new Set(data.itemIds));
-        })
-        .catch(() => {});
-    } else {
-      // Fallback for signed-out users
+    let cancelled = false;
+
+    /** Server for signed-in users, localStorage otherwise. Returns null if nothing usable. */
+    async function loadChecklist(): Promise<string[] | null> {
+      if (isSignedIn) {
+        try {
+          const res = await fetch(`/api/checklist/${slug}`);
+          const data = await res.json();
+          return Array.isArray(data.itemIds) ? data.itemIds : null;
+        } catch {
+          return null;
+        }
+      }
+
       try {
         const raw = localStorage.getItem(`cookbook-checklist-${slug}`);
-        if (!raw) return;
+        if (!raw) return null;
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          setChecked(new Set(parsed));
-        } else if (parsed && typeof parsed === 'object') {
+        if (Array.isArray(parsed)) return parsed;
+        if (parsed && typeof parsed === 'object') {
           const age = Date.now() - (parsed.savedAt ?? 0);
-          if (age < 24 * 60 * 60 * 1000) setChecked(new Set(parsed.ids ?? []));
+          // Signed-out checklists expire after a day.
+          if (age < 24 * 60 * 60 * 1000) return parsed.ids ?? [];
         }
-      } catch {}
+        return null;
+      } catch {
+        return null;
+      }
     }
+
+    void loadChecklist().then((ids) => {
+      if (!cancelled && ids) setChecked(new Set(ids));
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [slug, isSignedIn, authLoaded]);
 
   function toggle(id: string) {

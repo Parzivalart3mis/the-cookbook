@@ -10,6 +10,11 @@ import MarkCookedButton from './MarkCookedButton';
 import IngredientSubstitution from './IngredientSubstitution';
 import { extractIngredients, categorize } from '@/lib/ingredients';
 
+/** Module scope: keeps impure calls out of the component body. */
+function makeItemId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 export default function RecipeActions({
   blocks,
   slug,
@@ -55,7 +60,7 @@ export default function RecipeActions({
       return;
     }
     const items = ingredients.map(text => ({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      id: makeItemId(),
       text,
       category: categorize(text),
       recipeName: name,

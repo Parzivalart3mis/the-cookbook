@@ -1,20 +1,44 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { History } from 'lucide-react';
 
 type ViewedItem = { slug: string; name: string };
 
-export default function RecentlyViewedShelf() {
-  const [items, setItems] = useState<ViewedItem[]>([]);
+const STORAGE_KEY = 'cookbook-recently-viewed';
+const EMPTY: ViewedItem[] = [];
 
-  useEffect(() => {
+/** Memoised on the raw string so getSnapshot returns a stable reference. */
+let cachedRaw: string | null = null;
+let cachedItems: ViewedItem[] = EMPTY;
+
+function getViewedItems(): ViewedItem[] {
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return EMPTY;
+  }
+  if (raw !== cachedRaw) {
+    cachedRaw = raw;
     try {
-      const raw = localStorage.getItem('cookbook-recently-viewed');
-      setItems(raw ? JSON.parse(raw) : []);
-    } catch {}
-  }, []);
+      const parsed = raw ? JSON.parse(raw) : EMPTY;
+      cachedItems = Array.isArray(parsed) ? parsed : EMPTY;
+    } catch {
+      cachedItems = EMPTY;
+    }
+  }
+  return cachedItems;
+}
+
+function subscribeToViewed(onChange: () => void): () => void {
+  window.addEventListener('storage', onChange);
+  return () => window.removeEventListener('storage', onChange);
+}
+
+export default function RecentlyViewedShelf() {
+  const items = useSyncExternalStore(subscribeToViewed, getViewedItems, () => EMPTY);
 
   if (items.length === 0) return null;
 

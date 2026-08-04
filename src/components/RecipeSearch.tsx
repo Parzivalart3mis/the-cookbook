@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, X, ChefHat, ChevronDown, Check, Wand2, SlidersHorizontal } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -11,6 +11,11 @@ import MealQueueShelf from './MealQueueShelf';
 import RecentlyViewedPopover from './RecentlyViewedPopover';
 
 const ease = [0.22, 1, 0.36, 1] as const;
+
+/** Module scope: random selection is impure and must not sit in render scope. */
+function pickRandom<T>(pool: readonly T[]): T {
+  return pool[Math.floor(Math.random() * pool.length)];
+}
 
 const ALL_MEAL_TYPES = [
   'Breakfast', 'Lunch', 'Dinner', 'Meal Prep',
@@ -115,10 +120,18 @@ export default function RecipeSearch({
   }, [recipes, query, selectedTags, selectedMeals, servingBucket, nutritionFilter]);
 
   function toggleTag(tag: string) {
-    setSelectedTags(prev => { const n = new Set(prev); n.has(tag) ? n.delete(tag) : n.add(tag); return n; });
+    setSelectedTags(prev => {
+      const n = new Set(prev);
+      if (n.has(tag)) n.delete(tag); else n.add(tag);
+      return n;
+    });
   }
   function toggleMeal(mt: string) {
-    setSelectedMeals(prev => { const n = new Set(prev); n.has(mt) ? n.delete(mt) : n.add(mt); return n; });
+    setSelectedMeals(prev => {
+      const n = new Set(prev);
+      if (n.has(mt)) n.delete(mt); else n.add(mt);
+      return n;
+    });
   }
   function clearFilters() {
     setSelectedTags(new Set());
@@ -133,7 +146,7 @@ export default function RecipeSearch({
       setSurpriseMsg(`No recipes tagged as "${mealType}" yet.`);
       return;
     }
-    const pick = pool[Math.floor(Math.random() * pool.length)];
+    const pick = pickRandom(pool);
     setSurpriseOpen(false);
     setSurpriseMsg(null);
     router.push(`/recipes/${pick.slug}`);
@@ -354,6 +367,7 @@ export default function RecipeSearch({
           <button
             onClick={() => { setSurpriseOpen(o => !o); setSurpriseMsg(null); }}
             title="Surprise me"
+            aria-label="Pick a random recipe"
             className={cn(
               'flex items-center justify-center rounded-lg border p-1.5 transition-colors duration-150',
               surpriseOpen

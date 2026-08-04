@@ -36,13 +36,18 @@ function formatDayDate(weekStart: string, index: number): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+/** Module scope: keeps the impure calls out of the component body. */
+function makeEntryId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 type PlanEntry = { id: string; slug: string; name: string };
 type Plan = Record<string, PlanEntry[]>;
 
 export default function MealPlanClient({ allRecipes }: { allRecipes: RecipeSummary[] }) {
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
   const [plan, setPlan] = useState<Plan>({});
-  const [loading, setLoading] = useState(true);
+  const [loadedWeek, setLoadedWeek] = useState<string | null>(null);
   const [pickerDay, setPickerDay] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [shoppingDone, setShoppingDone] = useState(false);
@@ -51,13 +56,18 @@ export default function MealPlanClient({ allRecipes }: { allRecipes: RecipeSumma
   const [aiLoading, setAiLoading] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
 
+  // Derived: any week we haven't finished fetching is still loading. Avoids a
+  // synchronous setLoading(true) inside the effect.
+  const loading = loadedWeek !== weekStart;
+
   useEffect(() => {
-    setLoading(true);
+    let cancelled = false;
     fetch(`/api/meal-plan?weekStart=${weekStart}`)
       .then(r => r.json())
-      .then(data => setPlan(data.plan ?? {}))
+      .then(data => { if (!cancelled) setPlan(data.plan ?? {}); })
       .catch(() => {})
-      .finally(() => setLoading(false));
+      .finally(() => { if (!cancelled) setLoadedWeek(weekStart); });
+    return () => { cancelled = true; };
   }, [weekStart]);
 
   useEffect(() => {
@@ -72,7 +82,7 @@ export default function MealPlanClient({ allRecipes }: { allRecipes: RecipeSumma
   }, []);
 
   async function addRecipe(day: string, recipe: RecipeSummary) {
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const id = makeEntryId();
     const entry: PlanEntry = { id, slug: recipe.slug, name: recipe.name };
     setPlan(prev => ({ ...prev, [day]: [...(prev[day] ?? []), entry] }));
     setPickerDay(null);
@@ -130,7 +140,7 @@ export default function MealPlanClient({ allRecipes }: { allRecipes: RecipeSumma
         const saves: Promise<void>[] = [];
         for (const [day, entry] of Object.entries(data.plan as Record<string, { slug: string; name: string }>)) {
           if (!entry) continue;
-          const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          const id = makeEntryId();
           newPlan[day] = [{ id, slug: entry.slug, name: entry.name }];
           saves.push(
             fetch('/api/meal-plan', {

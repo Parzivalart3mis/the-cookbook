@@ -153,6 +153,7 @@ export default function RecipeImageSection({
                     onClick={search}
                     disabled={loading}
                     title="Search again"
+                    aria-label="Search for another image"
                     className="p-1.5 rounded-lg text-ink-faint hover:text-ink hover:bg-surface-hover transition-colors"
                   >
                     <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />

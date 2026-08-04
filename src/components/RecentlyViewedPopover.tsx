@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { History, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -10,16 +10,45 @@ const ease = [0.22, 1, 0.36, 1] as const;
 
 type ViewedItem = { slug: string; name: string };
 
-export default function RecentlyViewedPopover() {
-  const [items, setItems] = useState<ViewedItem[]>([]);
-  const [open, setOpen] = useState(false);
+const STORAGE_KEY = 'cookbook-recently-viewed';
+const EMPTY: ViewedItem[] = [];
 
-  useEffect(() => {
+/**
+ * localStorage read, memoised on the raw string.
+ * getSnapshot must return a stable reference — parsing on every call would
+ * hand React a new array each time and spin an infinite render loop.
+ */
+let cachedRaw: string | null = null;
+let cachedItems: ViewedItem[] = EMPTY;
+
+function getViewedItems(): ViewedItem[] {
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return EMPTY;
+  }
+  if (raw !== cachedRaw) {
+    cachedRaw = raw;
     try {
-      const raw = localStorage.getItem('cookbook-recently-viewed');
-      setItems(raw ? JSON.parse(raw) : []);
-    } catch {}
-  }, []);
+      const parsed = raw ? JSON.parse(raw) : EMPTY;
+      cachedItems = Array.isArray(parsed) ? parsed : EMPTY;
+    } catch {
+      cachedItems = EMPTY;
+    }
+  }
+  return cachedItems;
+}
+
+/** Only another tab can change this list while we're mounted. */
+function subscribeToViewed(onChange: () => void): () => void {
+  window.addEventListener('storage', onChange);
+  return () => window.removeEventListener('storage', onChange);
+}
+
+export default function RecentlyViewedPopover() {
+  const items = useSyncExternalStore(subscribeToViewed, getViewedItems, () => EMPTY);
+  const [open, setOpen] = useState(false);
 
   if (items.length === 0) return null;
 
@@ -28,6 +57,7 @@ export default function RecentlyViewedPopover() {
       <button
         onClick={() => setOpen(true)}
         title="Recently viewed"
+        aria-label="Recently viewed recipes"
         className={cn(
           'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-colors duration-150 shrink-0',
           open

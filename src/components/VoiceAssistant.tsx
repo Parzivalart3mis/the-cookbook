@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useSyncExternalStore } from 'react';
 import { Mic, MicOff, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { BlockObjectResponse } from '@notionhq/client/build/src/api-endpoints';
@@ -37,57 +37,89 @@ interface SpeechRecognitionInstance extends EventTarget {
   onend: (() => void) | null;
 }
 
+/** Web Speech API is vendor-prefixed in Safari and absent in Firefox. */
+function getSpeechRecognitionCtor(): (new () => SpeechRecognitionInstance) | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const w = window as unknown as {
+    SpeechRecognition?: new () => SpeechRecognitionInstance;
+    webkitSpeechRecognition?: new () => SpeechRecognitionInstance;
+  };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition;
+}
+
+const getSpeechSupported = () => getSpeechRecognitionCtor() !== undefined;
+/** Support never changes at runtime — nothing to subscribe to. */
+const subscribeToSpeechSupport = () => () => {};
+
 export default function VoiceAssistant({ blocks, recipeName }: { blocks: BlockObjectResponse[]; recipeName: string }) {
   const [state, setState] = useState<'idle' | 'listening' | 'loading' | 'answer'>('idle');
   const [transcript, setTranscript] = useState('');
   const [answer, setAnswer] = useState('');
-  const [supported, setSupported] = useState(true);
   const recogRef = useRef<SpeechRecognitionInstance | null>(null);
+  // Lets the (stable) recognition callbacks read the latest props.
+  const propsRef = useRef({ blocks, recipeName });
+
+  const supported = useSyncExternalStore(
+    subscribeToSpeechSupport,
+    getSpeechSupported,
+    () => true, // assume supported during SSR; corrected on hydration
+  );
 
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) { setSupported(false); return; }
+    propsRef.current = { blocks, recipeName };
+  }, [blocks, recipeName]);
+
+  useEffect(() => {
+    const SR = getSpeechRecognitionCtor();
+    if (!SR) return;
+
     const r: SpeechRecognitionInstance = new SR();
     r.lang = 'en-US';
     r.interimResults = false;
     r.maxAlternatives = 1;
 
-    r.onresult = (e) => {
-      const text = e.results[0]?.[0]?.transcript ?? '';
-      setTranscript(text);
-    };
-    r.onerror = () => setState('idle');
-    r.onend = () => {
-      setState(prev => prev === 'listening' ? 'idle' : prev);
-    };
-    recogRef.current = r;
-  }, []);
-
-  // When transcript arrives, fire the API call
-  useEffect(() => {
-    if (!transcript) return;
-    setState('loading');
-    const recipeText = `Recipe: ${recipeName}\n\n${blocksToText(blocks)}`;
-    fetch('/api/ai/voice', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: transcript, recipeText }),
-    })
-      .then(r => r.json())
-      .then(data => {
-        setAnswer(data.answer ?? 'No answer.');
+    /**
+     * Asking happens straight from the recognition callback rather than from
+     * an effect watching `transcript` — the effect fired a synchronous state
+     * update on every transcript change and re-ran on unrelated renders.
+     */
+    async function ask(question: string) {
+      const { blocks: b, recipeName: name } = propsRef.current;
+      setState('loading');
+      try {
+        const res = await fetch('/api/ai/voice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question,
+            recipeText: `Recipe: ${name}\n\n${blocksToText(b)}`,
+          }),
+        });
+        const data = await res.json();
+        const reply = data.answer ?? 'No answer.';
+        setAnswer(reply);
         setState('answer');
-        // Read answer aloud
         if ('speechSynthesis' in window) {
-          const utt = new SpeechSynthesisUtterance(data.answer);
+          const utt = new SpeechSynthesisUtterance(reply);
           utt.rate = 0.95;
           window.speechSynthesis.speak(utt);
         }
-      })
-      .catch(() => setState('idle'));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [transcript]);
+      } catch {
+        setState('idle');
+      }
+    }
+
+    r.onresult = (e) => {
+      const text = e.results[0]?.[0]?.transcript ?? '';
+      setTranscript(text);
+      if (text) void ask(text);
+    };
+    r.onerror = () => setState('idle');
+    r.onend = () => {
+      setState((prev) => (prev === 'listening' ? 'idle' : prev));
+    };
+    recogRef.current = r;
+  }, []);
 
   function startListening() {
     if (!recogRef.current) return;
@@ -122,7 +154,7 @@ export default function VoiceAssistant({ blocks, recipeName }: { blocks: BlockOb
             transition={{ duration: 0.2 }}
             className="relative max-w-xs w-72 bg-surface rounded-2xl border border-border shadow-xl px-4 py-3"
           >
-            <button onClick={dismiss} className="absolute top-2 right-2 text-ink-faint hover:text-ink transition-colors">
+            <button onClick={dismiss} aria-label="Dismiss" className="absolute top-2 right-2 text-ink-faint hover:text-ink transition-colors">
               <X size={14} />
             </button>
             {state === 'listening' && (
@@ -155,6 +187,7 @@ export default function VoiceAssistant({ blocks, recipeName }: { blocks: BlockOb
             : 'bg-accent hover:bg-accent-hover text-white'
         }`}
         title={state === 'listening' ? 'Stop listening' : 'Ask about this recipe'}
+        aria-label={state === 'listening' ? 'Stop listening' : 'Ask about this recipe'}
       >
         {state === 'listening' ? <MicOff size={20} /> : <Mic size={20} />}
       </motion.button>

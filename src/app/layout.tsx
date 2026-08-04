@@ -7,6 +7,7 @@ import { QueueProvider } from '@/components/QueueProvider';
 import WakeLock from '@/components/WakeLock';
 import WakeLockDebug from '@/components/WakeLockDebug';
 import ChromeGate from '@/components/ChromeGate';
+import AppSplash from '@/components/AppSplash';
 
 const fraunces = Fraunces({
   subsets: ['latin'],
@@ -66,6 +67,7 @@ export default function RootLayout({
           />
         </head>
         <body className="min-h-screen flex flex-col antialiased">
+          <AppSplash />
           <QueueProvider>
             <WakeLock />
             <WakeLockDebug />

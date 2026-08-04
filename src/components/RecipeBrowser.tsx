@@ -18,6 +18,9 @@ export default async function RecipeBrowser({ tag }: { tag?: string }) {
 
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 py-6">
+      {/* Page needs one h1 for document outline; the count line below is the
+          visible equivalent, so this stays screen-reader only. */}
+      <h1 className="sr-only">All recipes</h1>
       <div className="mb-3">
         <p className="text-ink-muted text-lg max-w-md">
           {error

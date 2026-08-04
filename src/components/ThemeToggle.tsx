@@ -1,18 +1,30 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import { Moon, Sun } from 'lucide-react';
 
-export default function ThemeToggle() {
-  const [isDark, setIsDark] = useState(false);
+/**
+ * The <html> class is the single source of truth for theme (an inline script
+ * in the layout sets it before paint). Reading it via useSyncExternalStore
+ * keeps this component in sync without mirroring the value into state.
+ */
+function subscribeToTheme(onChange: () => void): () => void {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['class'],
+  });
+  return () => observer.disconnect();
+}
 
-  useEffect(() => {
-    setIsDark(document.documentElement.classList.contains('dark'));
-  }, []);
+const getIsDark = () => document.documentElement.classList.contains('dark');
+
+export default function ThemeToggle() {
+  const isDark = useSyncExternalStore(subscribeToTheme, getIsDark, () => false);
 
   function toggle() {
     const next = !isDark;
-    setIsDark(next);
+    // Mutating the class fires the observer above, which re-renders us.
     document.documentElement.classList.toggle('dark', next);
     localStorage.setItem('theme', next ? 'dark' : 'light');
   }

@@ -31,15 +31,18 @@ const QueueContext = createContext<QueueContextType>({
 export function QueueProvider({ children }: { children: React.ReactNode }) {
   const { isSignedIn, isLoaded: authLoaded } = useAuth();
   const [queue, setQueue] = useState<QueueItem[]>([]);
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [fetched, setFetched] = useState(false);
+
+  // Derived rather than set in an effect: signed-out users have nothing to
+  // fetch, so they are "loaded" as soon as Clerk resolves.
+  const isLoaded = authLoaded && (!isSignedIn || fetched);
 
   useEffect(() => {
-    if (!authLoaded) return;
-    if (!isSignedIn) { setIsLoaded(true); return; }
+    if (!authLoaded || !isSignedIn) return;
     fetch('/api/queue')
       .then(r => r.json())
-      .then(data => { setQueue(data.queue ?? []); setIsLoaded(true); })
-      .catch(() => setIsLoaded(true));
+      .then(data => { setQueue(data.queue ?? []); setFetched(true); })
+      .catch(() => setFetched(true));
   }, [isSignedIn, authLoaded]);
 
   const addToQueue = useCallback(async (item: QueueItem) => {

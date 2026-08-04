@@ -19,6 +19,7 @@ export default function SiteHeader() {
           <Link
             href="/meal-plan"
             title="Meal Planner"
+            aria-label="Meal Planner"
             className="p-2 rounded-lg text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors duration-150"
           >
             <CalendarRange size={18} />
@@ -26,6 +27,7 @@ export default function SiteHeader() {
           <Link
             href="/timeline"
             title="Timeline"
+            aria-label="Timeline"
             className="p-2 rounded-lg text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors duration-150"
           >
             <CalendarDays size={18} />
@@ -33,6 +35,7 @@ export default function SiteHeader() {
           <Link
             href="/shopping-list"
             title="Shopping List"
+            aria-label="Shopping List"
             className="p-2 rounded-lg text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors duration-150"
           >
             <ShoppingCart size={18} />
