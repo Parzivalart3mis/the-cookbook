@@ -1,8 +1,12 @@
+import { auth } from '@clerk/nextjs/server';
 import Groq from 'groq-sdk';
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 export async function POST(req: Request) {
+  const { userId } = await auth();
+  if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+
   const { ingredient, recipeName } = await req.json() as { ingredient: string; recipeName: string };
   if (!ingredient?.trim()) return Response.json({ error: 'ingredient required' }, { status: 400 });
 
