@@ -37,12 +37,27 @@ export function extractIngredients(blocks: BlockObjectResponse[]): string[] {
   const isList = (block: { type: string }) =>
     block.type === 'bulleted_list_item' || block.type === 'numbered_list_item';
 
-  const hasIngredientHeading = b.some(block => isHeading(block) && INGREDIENT_KW.some(k => headingText(block).includes(k)));
+  /**
+   * Notion makes it easy to type a section label as normal text instead of a
+   * heading. Treat a short keyword-only paragraph as a divider too, so those
+   * recipes don't sweep their instructions into the ingredient list. The
+   * length cap keeps real instruction prose containing "step" from matching.
+   */
+  function isSectionLabel(block: { type: string; [key: string]: unknown }): boolean {
+    if (isHeading(block)) return true;
+    if (block.type !== 'paragraph') return false;
+    const t = listText(block);
+    if (!t || t.length > 40) return false;
+    const low = t.toLowerCase();
+    return INGREDIENT_KW.some(k => low.includes(k)) || INSTRUCTION_KW.some(k => low.includes(k));
+  }
+
+  const hasIngredientHeading = b.some(block => isSectionLabel(block) && INGREDIENT_KW.some(k => headingText(block).includes(k)));
   if (hasIngredientHeading) {
     let collecting = false;
     const result: string[] = [];
     for (const block of b) {
-      if (isHeading(block)) {
+      if (isSectionLabel(block)) {
         const h = headingText(block);
         if (INGREDIENT_KW.some(k => h.includes(k))) { collecting = true; continue; }
         if (INSTRUCTION_KW.some(k => h.includes(k))) { collecting = false; continue; }
