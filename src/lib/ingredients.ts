@@ -42,7 +42,15 @@ export function extractIngredients(blocks: BlockObjectResponse[]): string[] {
     let collecting = false;
     const result: string[] = [];
     for (const block of b) {
-      if (isHeading(block)) { collecting = INGREDIENT_KW.some(k => headingText(block).includes(k)); continue; }
+      if (isHeading(block)) {
+        const h = headingText(block);
+        if (INGREDIENT_KW.some(k => h.includes(k))) { collecting = true; continue; }
+        if (INSTRUCTION_KW.some(k => h.includes(k))) { collecting = false; continue; }
+        // A deeper sub-heading groups items inside the current section
+        // ("For the baati"); anything at section level ends it ("Notes").
+        if (block.type !== 'heading_3') collecting = false;
+        continue;
+      }
       if (collecting && isList(block)) { const t = listText(block); if (t) result.push(t); }
     }
     if (result.length > 0) return result;
