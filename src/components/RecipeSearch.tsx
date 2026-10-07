@@ -2,13 +2,15 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, X, ChefHat, ChevronDown, Check, Wand2, SlidersHorizontal } from 'lucide-react';
+import { Search, X, ChefHat, ChevronDown, Check, Wand2, SlidersHorizontal, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '@clerk/nextjs';
 import type { RecipeSummary, Nutrition } from '@/lib/notion';
 import { cn } from '@/lib/cn';
 import RecipeGrid from './RecipeGrid';
 import MealQueueShelf from './MealQueueShelf';
 import RecentlyViewedPopover from './RecentlyViewedPopover';
+import { useFavorites } from './FavoritesProvider';
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -51,9 +53,14 @@ export default function RecipeSearch({
   const [filterOpen, setFilterOpen]           = useState(false);
   const [surpriseOpen, setSurpriseOpen]       = useState(false);
   const [surpriseMsg, setSurpriseMsg]         = useState<string | null>(null);
+  const [favoritesOnly, setFavoritesOnly]     = useState(false);
   const filterRef   = useRef<HTMLDivElement>(null);
   const surpriseRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const { isSignedIn } = useAuth();
+  const { favorites, isFavorite } = useFavorites();
+  // Ignore a stale toggle after sign-out — there are no favorites to show then
+  const favoritesActive = favoritesOnly && !!isSignedIn;
 
   useEffect(() => {
     if (!filterOpen) return;
@@ -116,8 +123,9 @@ export default function RecipeSearch({
       const preset = NUTRITION_PRESETS.find(p => p.label === nutritionFilter);
       if (preset) result = result.filter(r => preset.test(r.nutrition));
     }
+    if (favoritesActive) result = result.filter(r => isFavorite(r.slug));
     return result;
-  }, [recipes, query, selectedTags, selectedMeals, servingBucket, nutritionFilter]);
+  }, [recipes, query, selectedTags, selectedMeals, servingBucket, nutritionFilter, favoritesActive, isFavorite]);
 
   function toggleTag(tag: string) {
     setSelectedTags(prev => {
@@ -152,7 +160,8 @@ export default function RecipeSearch({
     router.push(`/recipes/${pick.slug}`);
   }
 
-  const showEmpty = (hasQuery || hasActiveFilters) && filtered.length === 0;
+  const showEmpty = (hasQuery || hasActiveFilters || favoritesActive) && filtered.length === 0;
+  const noFavoritesYet = favoritesActive && favorites.length === 0;
 
   return (
     <div>
@@ -420,9 +429,27 @@ export default function RecipeSearch({
         {/* Recently viewed */}
         <RecentlyViewedPopover />
 
+        {/* Favorites — narrows the grid to starred recipes */}
+        {isSignedIn && (
+          <button
+            onClick={() => setFavoritesOnly(o => !o)}
+            title={favoritesActive ? 'Show all recipes' : 'Show favorites'}
+            aria-label="Show only favorite recipes"
+            aria-pressed={favoritesActive}
+            className={cn(
+              'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-colors duration-150 shrink-0',
+              favoritesActive
+                ? 'border-accent/50 bg-accent-light text-accent'
+                : 'border-border bg-surface-card text-ink-muted hover:border-accent/30 hover:text-ink'
+            )}
+          >
+            <Star size={14} fill={favoritesActive ? 'currentColor' : 'none'} />
+          </button>
+        )}
+
         {/* Active filter summary */}
         <AnimatePresence>
-          {hasActiveFilters && (
+          {(hasActiveFilters || favoritesActive) && (
             <motion.span
               initial={{ opacity: 0, x: -4 }}
               animate={{ opacity: 1, x: 0 }}
@@ -455,9 +482,13 @@ export default function RecipeSearch({
             >
               <ChefHat size={24} className="text-accent" />
             </motion.div>
-            <p className="font-display text-xl font-medium text-ink">No recipes found</p>
+            <p className="font-display text-xl font-medium text-ink">
+              {noFavoritesYet ? 'No favorites yet' : 'No recipes found'}
+            </p>
             <p className="text-ink-muted text-sm max-w-xs">
-              {hasQuery ? `Nothing matches "${query.trim()}".` : 'No recipes match the selected filters.'}
+              {noFavoritesYet
+                ? 'Tap the star on any recipe to save it here.'
+                : hasQuery ? `Nothing matches "${query.trim()}".` : 'No recipes match the selected filters.'}
               {hasActiveFilters && (
                 <>{' '}<button onClick={clearFilters} className="text-accent underline underline-offset-2 hover:text-accent-hover transition-colors duration-150">Clear filters</button></>
               )}

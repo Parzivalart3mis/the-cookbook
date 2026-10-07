@@ -4,6 +4,7 @@ import { ClerkProvider } from '@clerk/nextjs';
 import './globals.css';
 import SiteHeader from '@/components/SiteHeader';
 import { QueueProvider } from '@/components/QueueProvider';
+import { FavoritesProvider } from '@/components/FavoritesProvider';
 import WakeLock from '@/components/WakeLock';
 import WakeLockDebug from '@/components/WakeLockDebug';
 import ChromeGate from '@/components/ChromeGate';
@@ -69,19 +70,21 @@ export default function RootLayout({
         <body className="min-h-screen flex flex-col antialiased">
           <AppSplash />
           <QueueProvider>
-            <WakeLock />
-            <WakeLockDebug />
-            <ChromeGate>
-              <SiteHeader />
-            </ChromeGate>
-            <main className="flex-1">{children}</main>
-            <ChromeGate>
-              <footer className="border-t border-border py-6 mt-16">
-                <div className="mx-auto max-w-5xl px-4 sm:px-6 text-xs text-ink-faint text-center">
-                  The Cookbook — pulled fresh from Notion
-                </div>
-              </footer>
-            </ChromeGate>
+            <FavoritesProvider>
+              <WakeLock />
+              <WakeLockDebug />
+              <ChromeGate>
+                <SiteHeader />
+              </ChromeGate>
+              <main className="flex-1">{children}</main>
+              <ChromeGate>
+                <footer className="border-t border-border py-6 mt-16">
+                  <div className="mx-auto max-w-5xl px-4 sm:px-6 text-xs text-ink-faint text-center">
+                    The Cookbook — pulled fresh from Notion
+                  </div>
+                </footer>
+              </ChromeGate>
+            </FavoritesProvider>
           </QueueProvider>
         </body>
       </html>

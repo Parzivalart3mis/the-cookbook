@@ -3,9 +3,10 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Clock, BookmarkPlus, BookmarkCheck, ChefHat } from 'lucide-react';
+import { Clock, BookmarkPlus, BookmarkCheck, ChefHat, Star } from 'lucide-react';
 import type { RecipeSummary } from '@/lib/notion';
 import { useQueue } from './QueueProvider';
+import { useFavorites } from './FavoritesProvider';
 import { useAuth } from '@clerk/nextjs';
 
 const ease = [0.22, 1, 0.36, 1] as const;
@@ -39,7 +40,15 @@ export default function RecipeCard({
   const { isSignedIn } = useAuth();
   const { addToQueue, removeFromQueue, isInQueue } = useQueue();
   const inQueue = isInQueue(recipe.slug);
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const favorited = isFavorite(recipe.slug);
   const reduced = useReducedMotion();
+
+  function handleFavorite(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleFavorite(recipe.slug);
+  }
 
   function handleQueue(e: React.MouseEvent) {
     e.preventDefault();
@@ -152,21 +161,38 @@ export default function RecipeCard({
         </div>
 
         {isSignedIn && (
-          <button
-            onClick={handleQueue}
-            aria-label={
-              inQueue ? `Remove ${recipe.name} from this week` : `Add ${recipe.name} to this week`
-            }
-            aria-pressed={inQueue}
-            title={inQueue ? 'Remove from queue' : 'Add to this week'}
-            className={`absolute right-2 top-2 z-10 rounded-lg border p-1.5 transition-colors duration-150 ${
-              inQueue
-                ? 'border-accent/50 bg-accent-light text-accent'
-                : 'border-border bg-surface-card text-ink-faint hover:border-accent/30 hover:text-accent'
-            }`}
-          >
-            {inQueue ? <BookmarkCheck size={13} /> : <BookmarkPlus size={13} />}
-          </button>
+          <div className="absolute right-2 top-2 z-10 flex items-center gap-1.5">
+            <button
+              onClick={handleFavorite}
+              aria-label={
+                favorited ? `Remove ${recipe.name} from favorites` : `Add ${recipe.name} to favorites`
+              }
+              aria-pressed={favorited}
+              title={favorited ? 'Remove from favorites' : 'Add to favorites'}
+              className={`rounded-lg border p-1.5 transition-colors duration-150 ${
+                favorited
+                  ? 'border-accent/50 bg-accent-light text-accent'
+                  : 'border-border bg-surface-card text-ink-faint hover:border-accent/30 hover:text-accent'
+              }`}
+            >
+              <Star size={13} fill={favorited ? 'currentColor' : 'none'} />
+            </button>
+            <button
+              onClick={handleQueue}
+              aria-label={
+                inQueue ? `Remove ${recipe.name} from this week` : `Add ${recipe.name} to this week`
+              }
+              aria-pressed={inQueue}
+              title={inQueue ? 'Remove from queue' : 'Add to this week'}
+              className={`rounded-lg border p-1.5 transition-colors duration-150 ${
+                inQueue
+                  ? 'border-accent/50 bg-accent-light text-accent'
+                  : 'border-border bg-surface-card text-ink-faint hover:border-accent/30 hover:text-accent'
+              }`}
+            >
+              {inQueue ? <BookmarkCheck size={13} /> : <BookmarkPlus size={13} />}
+            </button>
+          </div>
         )}
       </motion.article>
     </motion.div>

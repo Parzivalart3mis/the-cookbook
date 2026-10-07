@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Bookmark, BookmarkCheck, ShoppingCart, Check } from 'lucide-react';
+import { Bookmark, BookmarkCheck, ShoppingCart, Check, Star } from 'lucide-react';
 import type { BlockObjectResponse } from '@notionhq/client/build/src/api-endpoints';
 import { useQueue } from './QueueProvider';
+import { useFavorites } from './FavoritesProvider';
 import { useAuth } from '@clerk/nextjs';
 import MarkCookedButton from './MarkCookedButton';
 import IngredientSubstitution from './IngredientSubstitution';
@@ -33,6 +34,8 @@ export default function RecipeActions({
   const { isSignedIn } = useAuth();
   const { addToQueue, removeFromQueue, isInQueue } = useQueue();
   const inQueue = isInQueue(slug);
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const favorited = isFavorite(slug);
 
   useEffect(() => {
     try {
@@ -95,6 +98,20 @@ export default function RecipeActions({
           >
             {inQueue ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
             {inQueue ? 'In Queue' : 'Add to Queue'}
+          </button>
+        )}
+        {isSignedIn && (
+          <button
+            onClick={() => toggleFavorite(slug)}
+            aria-pressed={favorited}
+            className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition-colors duration-150 ${
+              favorited
+                ? 'border-accent/50 bg-accent-light text-accent'
+                : 'border-border text-ink-muted hover:border-accent/30 hover:text-ink'
+            }`}
+          >
+            <Star size={14} fill={favorited ? 'currentColor' : 'none'} />
+            {favorited ? 'Favorited' : 'Add to Favorites'}
           </button>
         )}
 
