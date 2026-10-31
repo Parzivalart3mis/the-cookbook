@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { ArrowRight, CalendarRange } from 'lucide-react';
 import { Reveal, Magnetic, Aurora } from './primitives';
+import { FEATURES } from '@/lib/features';
 
 export default function CallToAction({ recipeCount }: { recipeCount: number }) {
   return (
@@ -65,15 +66,17 @@ export default function CallToAction({ recipeCount }: { recipeCount: number }) {
                     </Link>
                   </Magnetic>
 
-                  <Magnetic strength={0.2}>
-                    <Link
-                      href="/meal-plan"
-                      className="inline-flex items-center gap-2 rounded-full border border-[var(--l-line-strong)] bg-[var(--l-raise)]/50 px-8 py-4 text-sm font-medium text-[var(--l-text)] backdrop-blur-xl transition-colors duration-300 hover:border-[var(--l-ember)]/45 hover:bg-[var(--l-raise)]/80"
-                    >
-                      <CalendarRange size={15} className="text-[var(--l-ember)]" />
-                      Plan this week
-                    </Link>
-                  </Magnetic>
+                  {FEATURES.mealPlanner && (
+                    <Magnetic strength={0.2}>
+                      <Link
+                        href="/meal-plan"
+                        className="inline-flex items-center gap-2 rounded-full border border-[var(--l-line-strong)] bg-[var(--l-raise)]/50 px-8 py-4 text-sm font-medium text-[var(--l-text)] backdrop-blur-xl transition-colors duration-300 hover:border-[var(--l-ember)]/45 hover:bg-[var(--l-raise)]/80"
+                      >
+                        <CalendarRange size={15} className="text-[var(--l-ember)]" />
+                        Plan this week
+                      </Link>
+                    </Magnetic>
+                  )}
                 </div>
               </div>
             </div>

@@ -5,11 +5,12 @@ import { useState } from 'react';
 import { motion, useScroll, useMotionValueEvent } from 'framer-motion';
 import { ChefHat, ArrowRight } from 'lucide-react';
 import { EASE } from './primitives';
+import { FEATURES } from '@/lib/features';
 
 const NAV_LINKS = [
   { label: 'Features', href: '#features' },
   { label: 'Recipes', href: '/recipes' },
-  { label: 'Meal plan', href: '/meal-plan' },
+  ...(FEATURES.mealPlanner ? [{ label: 'Meal plan', href: '/meal-plan' }] : []),
 ];
 
 export default function Nav() {

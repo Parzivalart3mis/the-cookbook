@@ -10,6 +10,7 @@ import { useAuth } from '@clerk/nextjs';
 import MarkCookedButton from './MarkCookedButton';
 import IngredientSubstitution from './IngredientSubstitution';
 import { extractIngredients, categorize } from '@/lib/ingredients';
+import { FEATURES } from '@/lib/features';
 
 /** Module scope: keeps impure calls out of the component body. */
 function makeItemId(): string {
@@ -115,7 +116,7 @@ export default function RecipeActions({
           </button>
         )}
 
-        {isSignedIn && (
+        {isSignedIn && FEATURES.shoppingList && (
           shoppingDone ? (
             <Link
               href="/shopping-list"

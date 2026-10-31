@@ -32,7 +32,8 @@ export async function getPantry(): Promise<PantryResult> {
     const res = await fetch(`${base}/api/integrations/pantry`, {
       headers: { Authorization: `Bearer ${key}` },
       cache: 'no-store', // the pantry changes constantly; always read it fresh
-      signal: AbortSignal.timeout(8_000),
+      // tote may first sort new items into categories with AI (capped at ~6s there).
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) {
       console.error(`[tote] pantry request failed: ${res.status}`);
@@ -50,7 +51,10 @@ export async function getPantry(): Promise<PantryResult> {
   }
 }
 
-/** tote's non-food categories. Most items have no category, so names are checked too. */
+/**
+ * tote already drops Household / Personal Care items (it sorts new items with
+ * AI first). This is a fallback for anything still uncategorized there.
+ */
 const NON_FOOD_CATEGORIES = new Set(['Household', 'Personal Care']);
 const NON_FOOD_NAME =
   /\b(toilet|tissue|paper towel|napkin|detergent|soap|shampoo|conditioner|toothpaste|toothbrush|deodorant|lotion|bleach|cleaner|sponge|trash|garbage|bin bag|foil|cling ?film|plastic wrap|zip ?lock|ziploc|parchment|batter(?:y|ies)|light ?bulb|dishwasher|laundry|fabric softener|razor|floss|diaper|wipes)\b/i;

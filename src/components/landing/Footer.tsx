@@ -3,24 +3,31 @@
 import Link from 'next/link';
 import { ChefHat } from 'lucide-react';
 import { Reveal } from './primitives';
+import { FEATURES } from '@/lib/features';
 
-const LINKS: { heading: string; items: { label: string; href: string }[] }[] = [
+type FooterLink = { label: string; href: string; enabled?: boolean };
+
+const LINK_GROUPS: { heading: string; items: FooterLink[] }[] = [
   {
     heading: 'Cook',
     items: [
       { label: 'All recipes', href: '/recipes' },
-      { label: 'Meal planner', href: '/meal-plan' },
-      { label: 'Shopping list', href: '/shopping-list' },
+      { label: 'AI Kitchen', href: '/kitchen-ai' },
+      { label: 'Meal planner', href: '/meal-plan', enabled: FEATURES.mealPlanner },
+      { label: 'Shopping list', href: '/shopping-list', enabled: FEATURES.shoppingList },
     ],
   },
   {
     heading: 'Track',
     items: [
-      { label: 'Timeline', href: '/timeline' },
+      { label: 'Timeline', href: '/timeline', enabled: FEATURES.timeline },
       { label: 'Future recipes', href: '/future-recipes' },
     ],
   },
 ];
+
+/** Links to features switched off in src/lib/features.ts are dropped. */
+const LINKS = LINK_GROUPS.map(g => ({ ...g, items: g.items.filter(i => i.enabled !== false) }));
 
 export default function Footer() {
   return (

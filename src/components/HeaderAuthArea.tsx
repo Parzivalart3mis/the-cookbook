@@ -17,7 +17,7 @@ export default function HeaderAuthArea() {
           href="/future-recipes"
           title="Future Recipes"
           aria-label="Future Recipes"
-          className="p-1.5 sm:p-2 rounded-lg text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors duration-150"
+          className="p-2 rounded-lg text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors duration-150"
         >
           <Lightbulb size={18} />
         </Link>

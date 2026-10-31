@@ -8,8 +8,11 @@ import {
   Shuffle,
   RefreshCw,
   MonitorSmartphone,
+  Sparkles,
+  Refrigerator,
   type LucideIcon,
 } from 'lucide-react';
+import { FEATURES as FLAGS } from '@/lib/features';
 import { Reveal, Stagger, StaggerItem, GlowCard, Eyebrow } from './primitives';
 
 type Feature = {
@@ -30,12 +33,19 @@ const FEATURES: Feature[] = [
     span: 'md:col-span-4 lg:col-span-3 lg:row-span-2',
     glow: 'var(--l-ember-hot)',
   },
-  {
-    icon: CalendarRange,
-    title: 'Plan the whole week',
-    body: 'Drop recipes onto days, then turn the week into one shopping list.',
-    span: 'md:col-span-2 lg:col-span-3',
-  },
+  FLAGS.mealPlanner
+    ? {
+        icon: CalendarRange,
+        title: 'Plan the whole week',
+        body: 'Drop recipes onto days, then turn the week into one shopping list.',
+        span: 'md:col-span-2 lg:col-span-3',
+      }
+    : {
+        icon: Refrigerator,
+        title: 'Cook from your pantry',
+        body: 'Dishes you can make tonight from what is actually in stock — high-protein picks included.',
+        span: 'md:col-span-2 lg:col-span-3',
+      },
   {
     icon: Activity,
     title: '20 nutrients, per serving',
@@ -55,12 +65,19 @@ const FEATURES: Feature[] = [
     body: 'Get a substitution and what it changes.',
     span: 'md:col-span-2 lg:col-span-2',
   },
-  {
-    icon: ShoppingCart,
-    title: 'Sorted by aisle',
-    body: 'Ingredients auto-grouped into produce, dairy, pantry.',
-    span: 'md:col-span-3 lg:col-span-3',
-  },
+  FLAGS.shoppingList
+    ? {
+        icon: ShoppingCart,
+        title: 'Sorted by aisle',
+        body: 'Ingredients auto-grouped into produce, dairy, pantry.',
+        span: 'md:col-span-3 lg:col-span-3',
+      }
+    : {
+        icon: Sparkles,
+        title: 'Fresh ideas, with videos',
+        body: 'New dishes you have not cooked yet, each with its most-watched YouTube video.',
+        span: 'md:col-span-3 lg:col-span-3',
+      },
   {
     icon: MonitorSmartphone,
     title: 'Screen never sleeps',
