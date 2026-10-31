@@ -43,11 +43,23 @@ export async function getPantry(): Promise<PantryResult> {
       return { ok: false, reason: 'unreachable', message };
     }
     const data = (await res.json()) as { items?: PantryItem[] };
-    return { ok: true, items: data.items ?? [] };
+    return { ok: true, items: cookableItems(data.items ?? []) };
   } catch (err) {
     console.error('[tote] pantry request failed', err);
     return { ok: false, reason: 'unreachable', message: 'Couldn’t reach your tote pantry. Try again in a moment.' };
   }
+}
+
+/** tote's non-food categories. Most items have no category, so names are checked too. */
+const NON_FOOD_CATEGORIES = new Set(['Household', 'Personal Care']);
+const NON_FOOD_NAME =
+  /\b(toilet|tissue|paper towel|napkin|detergent|soap|shampoo|conditioner|toothpaste|toothbrush|deodorant|lotion|bleach|cleaner|sponge|trash|garbage|bin bag|foil|cling ?film|plastic wrap|zip ?lock|ziploc|parchment|batter(?:y|ies)|light ?bulb|dishwasher|laundry|fabric softener|razor|floss|diaper|wipes)\b/i;
+
+/** The pantry is also a household inventory; recipes only need the food. */
+export function cookableItems(items: PantryItem[]): PantryItem[] {
+  return items
+    .map(i => ({ ...i, name: i.name.trim() }))
+    .filter(i => i.name && !NON_FOOD_CATEGORIES.has(i.category ?? '') && !NON_FOOD_NAME.test(i.name));
 }
 
 export function formatPantryItem(i: PantryItem): string {
