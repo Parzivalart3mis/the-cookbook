@@ -45,6 +45,28 @@ Create a full-page database in Notion with these properties (names are case-sens
 
 The page body (headings, paragraphs, lists) becomes the recipe content.
 
+## AI Kitchen (`/kitchen-ai`)
+
+All AI features (AI Kitchen, meal planner, ingredient substitutions, voice assistant) use **Google Gemini** via `@google/genai` (`src/lib/gemini.ts`). If a model is retired or rate-limited, the app moves to the next model in its fallback list.
+
+| Tab | What it does | Needs |
+|---|---|---|
+| **Discover** | 6 new dishes not already in your cookbook or Future Recipes, each with its most-watched YouTube videos, plus recipe videos that went viral in the last 2 weeks | `GEMINI_API_KEY`, `YOUTUBE_API_KEY` (optional: without it you get YouTube search links) |
+| **From my pantry** | Dishes from the items tote marks **In stock** / **Running low** | `GEMINI_API_KEY`, `TOTE_API_URL`, `TOTE_API_KEY` |
+| **High-protein** | Same pantry, filtered to your targets (default ≥ 25 g protein, ≤ 500 kcal per serving), ranked by protein per calorie. If nothing meets custom targets, it offers to retry with the defaults | same as above |
+
+Environment variables (see `.env.local.example`):
+
+- `GEMINI_API_KEY`: from [Google AI Studio](https://aistudio.google.com/apikey). Optional `GEMINI_MODEL` / `GEMINI_MODEL_LITE` override the default models.
+- `YOUTUBE_API_KEY`: Google Cloud Console → enable **YouTube Data API v3** → Credentials → API key. Free quota is 10,000 units/day; one Discover refresh costs about 700, and results are cached for 6 h.
+- `TOTE_API_URL` / `TOTE_API_KEY`: your tote URL and the same value as tote's `PANTRY_SHARE_SECRET` (tote also needs `PANTRY_SHARE_USER_ID`).
+
+Check your key and models with:
+
+```bash
+GEMINI_API_KEY=... node scripts/test-gemini.mjs
+```
+
 ## Deploy to Vercel
 
 1. Push this repo to GitHub.
@@ -52,6 +74,7 @@ The page body (headings, paragraphs, lists) becomes the recipe content.
 3. Add environment variables in **Settings → Environment Variables**:
    - `NOTION_TOKEN`
    - `NOTION_DATABASE_ID`
+   - `GEMINI_API_KEY`, `YOUTUBE_API_KEY`, `TOTE_API_URL`, `TOTE_API_KEY` (AI features, see above)
 4. Deploy.
 
 Recipe edits in Notion show up on the live site within ~60 seconds (`revalidate = 60` ISR).
@@ -62,5 +85,7 @@ Recipe edits in Notion show up on the live site within ~60 seconds (`revalidate 
 - **@notionhq/client** — official Notion SDK
 - **Framer Motion** — entry and hover animations
 - **Lucide React** — icons
+- **@google/genai** — Gemini for all AI features
+- **YouTube Data API v3** — recipe videos
 - **@tailwindcss/typography** — prose styling on recipe bodies
 - Design system guided by the [ui-ux-pro-max skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill)

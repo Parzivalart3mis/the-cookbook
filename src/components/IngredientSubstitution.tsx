@@ -24,6 +24,7 @@ export default function IngredientSubstitution({ recipeName }: { recipeName: str
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ingredient: ingredient.trim(), recipeName }),
       });
+      if (!res.ok) throw new Error(`substitute failed: ${res.status}`);
       const data = await res.json();
       setResults(data.substitutes ?? []);
     } catch {

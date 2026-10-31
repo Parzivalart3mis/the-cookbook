@@ -1,9 +1,13 @@
 import { auth } from '@clerk/nextjs/server';
-import Groq from 'groq-sdk';
+import { aiErrorResponse, generateJson } from '@/lib/gemini';
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+export const maxDuration = 60;
 
 type RecipeInfo = { slug: string; name: string; prepTime: number | null; cookTime: number | null; tags: string[]; mealTypes: string[] };
+
+const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
+type Day = (typeof DAYS)[number];
+type Plan = Record<Day, { slug: string; name: string } | null>;
 
 export async function POST(req: Request) {
   const { userId } = await auth();
@@ -22,32 +26,53 @@ export async function POST(req: Request) {
     })
     .join('\n');
 
-  const completion = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
-    messages: [
+  // Only slugs from the user's cookbook are valid; an enum makes that a hard
+  // constraint of the response rather than a request in the prompt.
+  const slugs = [...new Set(recipes.map(r => r.slug))];
+  const daySchema = {
+    anyOf: [
       {
-        role: 'system',
-        content: `You are a meal planning assistant. Given a list of recipes and user preferences, assign one recipe per day (Mon–Sun) for the week. Some days can be left empty if not needed.
-
-Reply ONLY with valid JSON in this exact format, no markdown, no extra text:
-{"plan":{"monday":{"slug":"recipe-slug","name":"Recipe Name"},"tuesday":null,"wednesday":{"slug":"recipe-slug","name":"Recipe Name"},"thursday":null,"friday":{"slug":"recipe-slug","name":"Recipe Name"},"saturday":null,"sunday":null}}
-
-Use only slugs from the provided recipe list. Set a day to null if not planning a meal for that day.`,
+        type: 'object',
+        properties: { slug: { type: 'string', enum: slugs }, name: { type: 'string' } },
+        required: ['slug', 'name'],
       },
-      {
-        role: 'user',
-        content: `User preferences: ${preferences}\n\nAvailable recipes:\n${recipeList}`,
-      },
+      { type: 'null' },
     ],
-    max_tokens: 500,
-    temperature: 0.5,
-    response_format: { type: 'json_object' },
-  });
+  };
+  const schema = {
+    type: 'object',
+    properties: {
+      plan: {
+        type: 'object',
+        properties: Object.fromEntries(DAYS.map(d => [d, daySchema])),
+        required: [...DAYS],
+      },
+    },
+    required: ['plan'],
+  };
 
   try {
-    const parsed = JSON.parse(completion.choices[0]?.message?.content ?? '{}');
-    return Response.json(parsed);
-  } catch {
-    return Response.json({ plan: {} });
+    const data = await generateJson<{ plan: Partial<Plan> }>({
+      tier: 'full',
+      system: `You are a meal planning assistant. Given a list of recipes and user preferences, assign at most one recipe per day (Monday-Sunday). Set a day to null if the preferences don't call for a meal that day. Use only recipes from the list, with their exact slug and name.`,
+      prompt: `User preferences: ${preferences}\n\nAvailable recipes:\n${recipeList}`,
+      temperature: 0.5,
+      schema,
+    });
+
+    // Defensive: re-check against the real list and use the canonical names.
+    const bySlug = new Map(recipes.map(r => [r.slug, r.name]));
+    const plan = Object.fromEntries(
+      DAYS.map(d => {
+        const entry = data.plan?.[d];
+        const name = entry ? bySlug.get(entry.slug) : undefined;
+        return [d, entry && name ? { slug: entry.slug, name } : null];
+      })
+    ) as Plan;
+
+    return Response.json({ plan });
+  } catch (err) {
+    // No `plan` key on failure: the client clears the week before saving a plan.
+    return aiErrorResponse(err);
   }
 }

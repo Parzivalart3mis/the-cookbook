@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server';
-import Groq from 'groq-sdk';
+import { AiNotConfiguredError, generateText } from '@/lib/gemini';
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+export const maxDuration = 30;
 
 export async function POST(req: Request) {
   const { userId } = await auth();
@@ -10,19 +10,18 @@ export async function POST(req: Request) {
   const { question, recipeText } = await req.json() as { question: string; recipeText: string };
   if (!question?.trim()) return Response.json({ error: 'question required' }, { status: 400 });
 
-  const completion = await groq.chat.completions.create({
-    model: 'llama-3.1-8b-instant',
-    messages: [
-      {
-        role: 'system',
-        content: `You are a cooking assistant. Answer questions about the recipe below concisely (1-2 sentences max). Only answer questions about this recipe. Recipe:\n\n${recipeText}`,
-      },
-      { role: 'user', content: question },
-    ],
-    max_tokens: 120,
-    temperature: 0.3,
-  });
-
-  const answer = completion.choices[0]?.message?.content?.trim() ?? 'Sorry, I could not answer that.';
-  return Response.json({ answer });
+  try {
+    const answer = await generateText({
+      tier: 'lite',
+      system: `You are a hands-free cooking assistant; your answer is read aloud. Answer questions about the recipe below concisely (1-2 sentences max, plain text, no markdown). Only answer questions about this recipe. Recipe:\n\n${recipeText}`,
+      prompt: question,
+      temperature: 0.3,
+      timeoutMs: 12_000,
+    });
+    return Response.json({ answer });
+  } catch (err) {
+    // The voice UI speaks whatever `answer` holds, so always return one.
+    if (!(err instanceof AiNotConfiguredError)) console.error('[voice] AI request failed', err);
+    return Response.json({ answer: 'Sorry, I could not answer that right now.' });
+  }
 }
