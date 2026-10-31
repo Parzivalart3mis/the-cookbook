@@ -52,18 +52,26 @@ export async function getPantry(): Promise<PantryResult> {
 }
 
 /**
- * tote already drops Household / Personal Care items (it sorts new items with
- * AI first). This is a fallback for anything still uncategorized there.
+ * tote already drops Household / Personal Care items: it sorts new items with
+ * AI first and judges any still-uncategorized ones by name. This repeats that
+ * check as a safety net. A category, when set, wins over the name, so food like
+ * "Sponge cake mix" filed under Baking isn't dropped. Keep the word list in
+ * sync with tote's lib/categories.ts.
  */
 const NON_FOOD_CATEGORIES = new Set(['Household', 'Personal Care']);
 const NON_FOOD_NAME =
-  /\b(toilet|tissue|paper towel|napkin|detergent|soap|shampoo|conditioner|toothpaste|toothbrush|deodorant|lotion|bleach|cleaner|sponge|trash|garbage|bin bag|foil|cling ?film|plastic wrap|zip ?lock|ziploc|parchment|batter(?:y|ies)|light ?bulb|dishwasher|laundry|fabric softener|razor|floss|diaper|wipes)\b/i;
+  /\b(?:toilet|tissue|paper towel|napkin|detergent|soap|shampoo|conditioner|toothpaste|toothbrush|mouthwash|deodorant|lotion|sanitizer|(?:hand|body|face) ?wash|bleach|cleaner|sponge|trash|garbage|bin bag|foil|cling ?film|plastic wrap|zip ?lock|ziploc|parchment|batter(?:y|ies)|light ?bulb|dishwasher|laundry|fabric softener|razor|floss|diaper|wipe|bandage)(?:e?s)?\b/i;
+
+function isFood(i: PantryItem): boolean {
+  const category = i.category?.trim();
+  return category ? !NON_FOOD_CATEGORIES.has(category) : !NON_FOOD_NAME.test(i.name);
+}
 
 /** The pantry is also a household inventory; recipes only need the food. */
 export function cookableItems(items: PantryItem[]): PantryItem[] {
   return items
     .map(i => ({ ...i, name: i.name.trim() }))
-    .filter(i => i.name && !NON_FOOD_CATEGORIES.has(i.category ?? '') && !NON_FOOD_NAME.test(i.name));
+    .filter(i => i.name && isFood(i));
 }
 
 export function formatPantryItem(i: PantryItem): string {
