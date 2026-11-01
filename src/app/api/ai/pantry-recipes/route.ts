@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server';
 import { aiErrorResponse, generateJson } from '@/lib/gemini';
 import {
   clampTargets,
+  cleanCuisine,
   cleanRefine,
   type Difficulty,
   type Nutrition,
@@ -125,12 +126,14 @@ function finalize(raw: RawRecipe, pantry: PantryItem[]): PantryRecipe {
   };
 }
 
-function prompts(mode: PantryMode, pantry: PantryItem[], refine: string, targets: Targets) {
-  const base = `You are a practical home-cooking assistant. Suggest dishes the cook can make RIGHT NOW from their pantry. Most ingredients must come from the pantry list; at most 3 missing ingredients per dish, fewer is better. Salt, pepper, water and cooking oil are always available. Items marked [running low] can be used but only in small amounts. In usesFromPantry, copy pantry item names exactly as written. Steps are short and actionable. Nutrition is a realistic per-serving estimate.`;
+function prompts(mode: PantryMode, pantry: PantryItem[], refine: string, targets: Targets, cuisine: string) {
+  const base = `You are a practical home-cooking assistant. Suggest dishes the cook can make RIGHT NOW from their pantry. Most ingredients must come from the pantry list; at most 3 missing ingredients per dish, fewer is better. Salt, pepper, water and cooking oil are always available. Items marked [running low] can be used but only in small amounts. In usesFromPantry, copy pantry item names exactly as written. Steps are short and actionable. Nutrition is a realistic per-serving estimate.${
+    cuisine ? ` Every dish must be ${cuisine} cuisine; don't relabel a dish from another cuisine as ${cuisine}.` : ''
+  }`;
   const system =
     mode === 'protein'
       ? `${base}\n\nEvery dish MUST be high-protein and low-calorie: at least ${targets.minProtein} g protein and at most ${targets.maxCalories} kcal per serving. Maximise protein per calorie (lean proteins, eggs, Greek yogurt, legumes, tofu, cottage cheese, etc.). Pick a serving size that makes the numbers honest. Don't shrink portions to hit the targets. Report each dish's real nutrition even if it misses the targets; never adjust the numbers to fit them. Calories must match the macros (4 kcal per g of protein and carbs, 9 per g of fat).`
-      : `${base}\n\nVary the dishes (breakfast, mains, snacks; different cuisines) and prefer ones that use up items marked [running low].`;
+      : `${base}\n\nVary the dishes (breakfast, mains, snacks${cuisine ? '' : '; different cuisines'}) and prefer ones that use up items marked [running low].`;
   const prompt = [
     `Pantry (${pantry.length} items):\n${pantry.map(p => `- ${formatPantryItem(p)}`).join('\n')}`,
     refine ? `The cook's request: ${refine}` : '',
@@ -145,10 +148,11 @@ export async function POST(req: Request) {
   // Counted from the start, so a slow tote read leaves Gemini less time rather than overrunning.
   const deadline = Date.now() + (maxDuration - 5) * 1000;
 
-  const body = (await req.json().catch(() => ({}))) as { mode?: unknown; refine?: unknown; targets?: Partial<Targets> };
+  const body = (await req.json().catch(() => ({}))) as { mode?: unknown; refine?: unknown; targets?: Partial<Targets>; cuisine?: unknown };
   const mode: PantryMode = body.mode === 'protein' ? 'protein' : 'pantry';
   const refine = cleanRefine(body.refine);
   const targets = clampTargets(body.targets);
+  const cuisine = cleanCuisine(body.cuisine);
 
   const pantryRes = await getPantry();
   if (!pantryRes.ok) {
@@ -164,7 +168,7 @@ export async function POST(req: Request) {
 
   let raw: RawRecipe[];
   try {
-    const { system, prompt } = prompts(mode, pantry, refine, targets);
+    const { system, prompt } = prompts(mode, pantry, refine, targets, cuisine);
     const data = await generateJson<{ recipes: RawRecipe[] }>({
       tier: 'full',
       deadline,

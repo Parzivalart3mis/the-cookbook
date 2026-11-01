@@ -54,6 +54,7 @@ export type PantryRecipesRequest = {
   mode: PantryMode;
   refine?: string;
   targets?: Targets;
+  cuisine?: string;
 };
 
 export type PantryRecipesResponse =
@@ -86,4 +87,14 @@ export function isDefaultTargets(t: Targets): boolean {
 /** Keep free-text refinements short so they can't swamp the prompt. */
 export function cleanRefine(v: unknown): string {
   return typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, 200) : '';
+}
+
+/** One-tap cuisine choices in every tab; anything else goes in the custom field. */
+export const CUISINES = ['Indian', 'Chinese', 'Italian', 'American'] as const;
+
+/** A cuisine name such as "Thai" or "Tex-Mex". Empty means any cuisine. */
+export function cleanCuisine(v: unknown): string {
+  return typeof v === 'string'
+    ? v.replace(/[^a-zA-ZÀ-ɏ\s'&-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40)
+    : '';
 }

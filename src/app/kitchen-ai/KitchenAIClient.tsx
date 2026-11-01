@@ -5,6 +5,7 @@ import { AlertCircle, Dumbbell, Flame, Loader2, Refrigerator, RefreshCw, Sparkle
 import { IdeaCard, PantryRecipeCard, VideoCard } from '@/components/kitchen/KitchenCards';
 import { Skeleton } from '@/components/Skeleton';
 import {
+  CUISINES,
   DEFAULT_TARGETS,
   TARGET_LIMITS,
   clampTargets,
@@ -26,7 +27,7 @@ const TABS: { id: TabId; label: string; short: string; icon: typeof Sparkles; bl
     short: 'Discover',
     icon: Flame,
     blurb: 'New dishes you don’t have yet, with the most-watched YouTube videos for each.',
-    placeholder: 'e.g. Korean, quick weeknight, dessert…',
+    placeholder: 'e.g. quick weeknight, dessert, street food…',
   },
   {
     id: 'pantry',
@@ -46,7 +47,8 @@ const TABS: { id: TabId; label: string; short: string; icon: typeof Sparkles; bl
   },
 ];
 
-type Cached<T> = { at: number; data: T };
+/** `cuisine` is what the results were generated for; empty or missing means any. */
+type Cached<T> = { at: number; data: T; cuisine?: string };
 type DiscoverData = { ideas: IdeasResponse; trending: TrendingResponse };
 
 const KEY = {
@@ -55,6 +57,7 @@ const KEY = {
   protein: 'kitchen-ai:v1:protein',
   targets: 'kitchen-ai:v1:targets',
   refine: 'kitchen-ai:v1:refine',
+  cuisine: 'kitchen-ai:v1:cuisine',
 } as const;
 
 const EMPTY_FLAGS: Record<TabId, boolean> = { discover: false, pantry: false, protein: false };
@@ -90,6 +93,9 @@ export default function KitchenAIClient({ initialTab }: { initialTab: TabId }) {
   const [refine, setRefine] = useState<Record<TabId, string>>(
     () => ({ discover: '', pantry: '', protein: '', ...(sGet<Record<TabId, string>>(KEY.refine) ?? {}) })
   );
+  const [cuisine, setCuisine] = useState<Record<TabId, string>>(
+    () => ({ discover: '', pantry: '', protein: '', ...(sGet<Record<TabId, string>>(KEY.cuisine) ?? {}) })
+  );
   const [loading, setLoading] = useState(EMPTY_FLAGS);
   const [errors, setErrors] = useState(EMPTY_ERRORS);
   const [saved, setSaved] = useState<Set<string>>(() => new Set());
@@ -124,6 +130,14 @@ export default function KitchenAIClient({ initialTab }: { initialTab: TabId }) {
     });
   }
 
+  function updateCuisine(id: TabId, value: string) {
+    setCuisine(prev => {
+      const next = { ...prev, [id]: value };
+      sSet(KEY.cuisine, next);
+      return next;
+    });
+  }
+
   function updateTargets(next: Targets) {
     setTargets(next);
     sSet(KEY.targets, next);
@@ -145,19 +159,20 @@ export default function KitchenAIClient({ initialTab }: { initialTab: TabId }) {
   async function runDiscover() {
     setFlag('discover', true);
     setError('discover', null);
+    const picked = cuisine.discover;
     try {
       const [ideasRes, trendingRes] = await Promise.all([
         fetch('/api/ai/ideas', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refine: refine.discover }),
+          body: JSON.stringify({ refine: refine.discover, cuisine: picked }),
         }),
-        fetch('/api/ai/trending'),
+        fetch(`/api/ai/trending${picked ? `?cuisine=${encodeURIComponent(picked)}` : ''}`),
       ]);
       if (!ideasRes.ok) throw new Error(await readError(ideasRes));
       const ideas = (await ideasRes.json()) as IdeasResponse;
       const trending: TrendingResponse = trendingRes.ok ? await trendingRes.json() : { videos: [], youtube: ideas.youtube };
-      const cached = { at: Date.now(), data: { ideas, trending } };
+      const cached = { at: Date.now(), data: { ideas, trending }, cuisine: picked };
       setDiscover(cached);
       sSet(KEY.discover, cached);
     } catch (e) {
@@ -171,15 +186,16 @@ export default function KitchenAIClient({ initialTab }: { initialTab: TabId }) {
     const id: TabId = mode;
     setFlag(id, true);
     setError(id, null);
+    const picked = cuisine[id];
     try {
       const res = await fetch('/api/ai/pantry-recipes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode, refine: refine[id], targets: override ?? targets }),
+        body: JSON.stringify({ mode, refine: refine[id], targets: override ?? targets, cuisine: picked }),
       });
       if (!res.ok) throw new Error(await readError(res));
       const data = (await res.json()) as PantryRecipesResponse;
-      const cached = { at: Date.now(), data };
+      const cached = { at: Date.now(), data, cuisine: picked };
       if (mode === 'protein') { setProtein(cached); sSet(KEY.protein, cached); }
       else { setPantry(cached); sSet(KEY.pantry, cached); }
     } catch (e) {
@@ -199,6 +215,9 @@ export default function KitchenAIClient({ initialTab }: { initialTab: TabId }) {
   const current = tab === 'discover' ? discover : tab === 'pantry' ? pantry : protein;
   const meta = TABS.find(t => t.id === tab)!;
   const busy = loading[tab];
+  const picked = cuisine[tab];
+  // The results on screen are for the picked cuisine, so the button just refreshes them.
+  const matches = !!current && (current.cuisine ?? '') === picked;
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
@@ -238,6 +257,13 @@ export default function KitchenAIClient({ initialTab }: { initialTab: TabId }) {
 
       {/* Controls */}
       <div className="mb-6 rounded-xl border border-border bg-surface-card p-4">
+        <CuisinePicker
+          key={tab}
+          value={picked}
+          onChange={c => updateCuisine(tab, c)}
+          onSubmit={() => { if (!busy) void run(); }}
+          disabled={busy}
+        />
         {tab === 'protein' && <TargetsEditor targets={targets} onChange={updateTargets} disabled={busy} />}
         <div className="flex flex-col gap-2 sm:flex-row">
           <input
@@ -256,12 +282,17 @@ export default function KitchenAIClient({ initialTab }: { initialTab: TabId }) {
             disabled={busy}
             className="flex items-center justify-center gap-1.5 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {busy ? <Loader2 size={15} className="animate-spin" /> : current ? <RefreshCw size={15} /> : <Sparkles size={15} />}
-            {busy ? 'Thinking…' : current ? 'Refresh' : tab === 'discover' ? 'Get ideas' : 'Suggest dishes'}
+            {busy ? <Loader2 size={15} className="animate-spin" /> : matches ? <RefreshCw size={15} /> : <Sparkles size={15} />}
+            {busy ? 'Thinking…'
+              : matches ? 'Refresh'
+              : tab === 'discover' ? `Get ${picked ? `${picked} ` : ''}ideas`
+              : `Suggest ${picked ? `${picked} ` : ''}dishes`}
           </button>
         </div>
         {current && !busy && (
-          <p className="mt-2 text-xs text-ink-faint">Generated {timeAgo(current.at, now)}. Refresh for new suggestions.</p>
+          <p className="mt-2 text-xs text-ink-faint">
+            Generated {timeAgo(current.at, now)}{current.cuisine ? ` · ${current.cuisine}` : ''}.{matches ? ' Refresh for new suggestions.' : ''}
+          </p>
         )}
       </div>
 
@@ -276,7 +307,7 @@ export default function KitchenAIClient({ initialTab }: { initialTab: TabId }) {
         <ResultsSkeleton />
       ) : (
         <div className={busy ? 'pointer-events-none opacity-50 transition-opacity' : 'transition-opacity'}>
-          {tab === 'discover' && (discover ? <DiscoverResults data={discover.data} isSaved={isSaved} onSave={saveIdea} /> : <EmptyState tab="discover" />)}
+          {tab === 'discover' && (discover ? <DiscoverResults data={discover.data} cuisine={discover.cuisine} isSaved={isSaved} onSave={saveIdea} /> : <EmptyState tab="discover" />)}
           {tab === 'pantry' && (pantry ? <PantryResults data={pantry.data} isSaved={isSaved} onSave={saveIdea} /> : <EmptyState tab="pantry" />)}
           {tab === 'protein' && (
             protein ? (
@@ -291,6 +322,53 @@ export default function KitchenAIClient({ initialTab }: { initialTab: TabId }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function CuisinePicker({
+  value, onChange, onSubmit, disabled,
+}: { value: string; onChange: (c: string) => void; onSubmit: () => void; disabled: boolean }) {
+  // Typed text is kept here, so typing "Indian" in the field doesn't jump to the Indian chip.
+  const [custom, setCustom] = useState(() => ((CUISINES as readonly string[]).includes(value) ? '' : value));
+  const typed = custom.trim() !== '';
+  const options = [{ label: 'Any', value: '' }, ...CUISINES.map(c => ({ label: c, value: c }))];
+
+  return (
+    <div className="mb-3">
+      <p id="cuisine-label" className="mb-1.5 text-xs font-medium text-ink-muted">Cuisine</p>
+      <div role="group" aria-labelledby="cuisine-label" className="flex flex-wrap items-center gap-1.5">
+        {options.map(o => {
+          const active = !typed && value === o.value;
+          return (
+            <button
+              key={o.label}
+              type="button"
+              disabled={disabled}
+              aria-pressed={active}
+              onClick={() => { setCustom(''); onChange(o.value); }}
+              className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-60 ${
+                active ? 'bg-accent text-white' : 'border border-border text-ink-muted hover:bg-surface-hover hover:text-ink'
+              }`}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+        <input
+          type="text"
+          value={custom}
+          disabled={disabled}
+          maxLength={40}
+          onChange={e => { setCustom(e.target.value); onChange(e.target.value.trim()); }}
+          onKeyDown={e => { if (e.key === 'Enter') onSubmit(); }}
+          placeholder="Other, e.g. Thai"
+          aria-label="Other cuisine"
+          className={`w-full rounded-full border px-3 py-1.5 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 sm:w-44 ${
+            typed ? 'border-accent bg-accent-light' : 'border-border bg-surface'
+          }`}
+        />
+      </div>
     </div>
   );
 }
@@ -354,14 +432,14 @@ function TargetsEditor({ targets, onChange, disabled }: { targets: Targets; onCh
 }
 
 function DiscoverResults({
-  data, isSaved, onSave,
-}: { data: DiscoverData; isSaved: (n: string) => boolean; onSave: (n: string) => Promise<void> }) {
+  data, cuisine, isSaved, onSave,
+}: { data: DiscoverData; cuisine?: string; isSaved: (n: string) => boolean; onSave: (n: string) => Promise<void> }) {
   const { ideas, trending } = data;
   return (
     <div className="space-y-10">
       <section>
         <h2 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-ink-muted">
-          <Sparkles size={13} /> Ideas for you · {ideas.ideas.length}
+          <Sparkles size={13} /> {cuisine ? `${cuisine} ideas` : 'Ideas for you'} · {ideas.ideas.length}
         </h2>
         {!ideas.youtube && (
           <p className="mb-3 text-xs text-ink-faint">Add a YOUTUBE_API_KEY to show the most-watched videos for each idea. Until then you get YouTube search links.</p>
@@ -380,7 +458,7 @@ function DiscoverResults({
       {trending.youtube && trending.videos.length > 0 && (
         <section>
           <h2 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-ink-muted">
-            <TrendingUp size={13} /> Viral on YouTube · last 2 weeks
+            <TrendingUp size={13} /> Viral{cuisine ? ` ${cuisine}` : ''} on YouTube · last 2 weeks
           </h2>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {trending.videos.map(v => <VideoCard key={v.id} video={v} />)}

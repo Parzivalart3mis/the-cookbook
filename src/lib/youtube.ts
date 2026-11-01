@@ -122,14 +122,14 @@ export async function popularVideosFor(query: string, limit = 3): Promise<YouTub
   return videos.sort((a, b) => b.views - a.views).slice(0, limit);
 }
 
-/** Recipe videos going viral right now: most viewed, published in the last two weeks. */
-export async function trendingRecipeVideos(limit = 9): Promise<YouTubeVideo[]> {
+/** Recipe videos going viral right now (of one cuisine, if given): most viewed, published in the last two weeks. */
+export async function trendingRecipeVideos(limit = 9, cuisine = ''): Promise<YouTubeVideo[]> {
   // Day-aligned so the cache key (URL) is stable for the whole day.
   const since = new Date(Date.now() - 14 * 86_400_000);
   since.setUTCHours(0, 0, 0, 0);
   const search = await call<SearchResponse>('search', {
     ...baseSearchParams(),
-    q: 'recipe',
+    q: cuisine ? `${cuisine} recipe` : 'recipe',
     order: 'viewCount',
     publishedAfter: since.toISOString(),
     maxResults: String(Math.min(limit + 3, 25)),

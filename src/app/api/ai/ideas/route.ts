@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
 import { aiErrorResponse, generateJson } from '@/lib/gemini';
-import { cleanRefine, type Difficulty, type IdeasResponse, type RecipeIdea } from '@/lib/kitchen-ai';
+import { cleanCuisine, cleanRefine, type Difficulty, type IdeasResponse, type RecipeIdea } from '@/lib/kitchen-ai';
 import { getAllRecipes } from '@/lib/notion';
 import { popularVideosFor, youtubeConfigured, youtubeSearchUrl } from '@/lib/youtube';
 
@@ -57,8 +57,9 @@ export async function POST(req: Request) {
   // Leaves 20 s of maxDuration for the YouTube lookups that run after Gemini.
   const deadline = Date.now() + (maxDuration - 20) * 1000;
 
-  const body = (await req.json().catch(() => ({}))) as { refine?: unknown };
+  const body = (await req.json().catch(() => ({}))) as { refine?: unknown; cuisine?: unknown };
   const refine = cleanRefine(body.refine);
+  const cuisine = cleanCuisine(body.cuisine);
   const { names, tastes } = await knownDishes(userId);
 
   let raw: RawIdea[];
@@ -66,7 +67,11 @@ export async function POST(req: Request) {
     const data = await generateJson<{ ideas: RawIdea[] }>({
       tier: 'full',
       deadline,
-      system: `You are a food trend scout for a home cook. Suggest ${IDEA_COUNT} fresh recipe ideas: dishes that are popular or have gone viral on YouTube, TikTok and Instagram food content. Mix cuisines, meal types and effort levels unless the cook asks otherwise. Never suggest a dish the cook already has (exact or near-duplicate names). Favour dishes that a home kitchen can realistically make.`,
+      system: `You are a food trend scout for a home cook. Suggest ${IDEA_COUNT} fresh recipe ideas: dishes that are popular or have gone viral on YouTube, TikTok and Instagram food content. ${
+        cuisine
+          ? `Every idea must be a ${cuisine} dish; mix meal types and effort levels.`
+          : 'Mix cuisines, meal types and effort levels unless the cook asks otherwise.'
+      } Never suggest a dish the cook already has (exact or near-duplicate names). Favour dishes that a home kitchen can realistically make.`,
       prompt: [
         tastes.length ? `The cook's collection leans towards: ${tastes.join(', ')}. Use this as a taste hint, not a restriction.` : '',
         names.length ? `Dishes the cook already has. Do NOT suggest these:\n${names.map(n => `- ${n}`).join('\n')}` : '',
