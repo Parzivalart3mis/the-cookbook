@@ -167,15 +167,28 @@ export async function generateText(opts: GenerateOptions): Promise<string> {
   return (await generate(opts)).text;
 }
 
+/** How long Google asks us to wait, from a 429's RetryInfo, in seconds. */
+function retryDelaySeconds(err: ApiError): number | null {
+  const m = /"retryDelay":"(\d+(?:\.\d+)?)s"/.exec(err.message);
+  return m ? Number(m[1]) : null;
+}
+
+function quotaMessage(err: ApiError): string {
+  const wait = retryDelaySeconds(err);
+  if (wait === null || wait <= 120) return 'AI quota reached, try again in a minute.';
+  // A daily limit (the free tier allows a set number of requests per model per day).
+  const hours = Math.max(1, Math.round(wait / 3600));
+  return `Gemini’s daily limit is used up. Try again in about ${hours} hour${hours === 1 ? '' : 's'}.`;
+}
+
 /** Uniform JSON error for AI route handlers. */
 export function aiErrorResponse(err: unknown): Response {
   if (err instanceof AiNotConfiguredError) {
     return Response.json({ error: 'AI is not configured (GEMINI_API_KEY missing).' }, { status: 503 });
   }
   console.error('[gemini] request failed', err);
-  const status = err instanceof ApiError && err.status === 429 ? 429 : 502;
-  return Response.json(
-    { error: status === 429 ? 'AI quota reached, try again in a minute.' : 'AI request failed, try again.' },
-    { status }
-  );
+  if (err instanceof ApiError && err.status === 429) {
+    return Response.json({ error: quotaMessage(err) }, { status: 429 });
+  }
+  return Response.json({ error: 'AI request failed, try again.' }, { status: 502 });
 }
