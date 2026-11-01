@@ -110,7 +110,11 @@ function baseSearchParams(): Record<string, string> {
  * them by views. Sorting the whole search by views tends to surface popular but
  * off-topic videos.
  */
-export async function popularVideosFor(query: string, limit = 3): Promise<YouTubeVideo[]> {
+export async function popularVideosFor(
+  query: string,
+  limit = 3,
+  keep: (v: YouTubeVideo) => boolean = () => true
+): Promise<YouTubeVideo[]> {
   const search = await call<SearchResponse>('search', {
     ...baseSearchParams(),
     q: query,
@@ -118,22 +122,30 @@ export async function popularVideosFor(query: string, limit = 3): Promise<YouTub
     maxResults: '8',
   });
   const ids = (search?.items ?? []).map(i => i.id?.videoId).filter((id): id is string => !!id);
-  const videos = await hydrate(ids);
+  const videos = (await hydrate(ids)).filter(keep);
   return videos.sort((a, b) => b.views - a.views).slice(0, limit);
 }
 
-/** Recipe videos going viral right now (of one cuisine, if given): most viewed, published in the last two weeks. */
-export async function trendingRecipeVideos(limit = 9, cuisine = ''): Promise<YouTubeVideo[]> {
+/**
+ * Recipe videos going viral right now: most viewed, published in the last two
+ * weeks. `query` narrows them (e.g. "vegetarian Indian recipe"); `keep` drops
+ * some by title, so a filtered search fetches more to choose from (same quota).
+ */
+export async function trendingRecipeVideos(
+  limit = 9,
+  { query = 'recipe', keep }: { query?: string; keep?: (v: YouTubeVideo) => boolean } = {}
+): Promise<YouTubeVideo[]> {
   // Day-aligned so the cache key (URL) is stable for the whole day.
   const since = new Date(Date.now() - 14 * 86_400_000);
   since.setUTCHours(0, 0, 0, 0);
   const search = await call<SearchResponse>('search', {
     ...baseSearchParams(),
-    q: cuisine ? `${cuisine} recipe` : 'recipe',
+    q: query,
     order: 'viewCount',
     publishedAfter: since.toISOString(),
-    maxResults: String(Math.min(limit + 3, 25)),
+    maxResults: String(keep ? 25 : Math.min(limit + 3, 25)),
   });
   const ids = (search?.items ?? []).map(i => i.id?.videoId).filter((id): id is string => !!id);
-  return (await hydrate(ids)).sort((a, b) => b.views - a.views).slice(0, limit);
+  const videos = await hydrate(ids);
+  return (keep ? videos.filter(keep) : videos).sort((a, b) => b.views - a.views).slice(0, limit);
 }

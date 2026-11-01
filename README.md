@@ -55,6 +55,11 @@ All AI features (AI Kitchen, meal planner, ingredient substitutions, voice assis
 | **From my pantry** | Dishes from the items tote marks **In stock** / **Running low** | `GEMINI_API_KEY`, `TOTE_API_URL`, `TOTE_API_KEY` |
 | **High-protein** | Same pantry, filtered to your targets (default ≥ 25 g protein, ≤ 500 kcal per serving), ranked by protein per calorie. If nothing meets custom targets, it offers to retry with the defaults | same as above |
 
+Every tab also has:
+
+- **Cuisine:** Any, Indian, Chinese, Italian, American, or one you type. Each tab remembers its own.
+- **Diet:** Vegetarian (the default), Eggetarian or Non-veg, shared by all tabs. For Vegetarian and Eggetarian, Gemini's dishes are also checked for meat, fish (and egg) words, including hidden ones like fish sauce and gelatin, and YouTube videos are filtered by title the same way (`fitsDiet` in `src/lib/kitchen-ai.ts`).
+
 Environment variables (see `.env.local.example`):
 
 - `GEMINI_API_KEY`: from [Google AI Studio](https://aistudio.google.com/apikey). Optional `GEMINI_MODEL` / `GEMINI_MODEL_LITE` override the default models.

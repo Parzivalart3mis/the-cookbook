@@ -55,6 +55,7 @@ export type PantryRecipesRequest = {
   refine?: string;
   targets?: Targets;
   cuisine?: string;
+  diet?: Diet;
 };
 
 export type PantryRecipesResponse =
@@ -97,4 +98,64 @@ export function cleanCuisine(v: unknown): string {
   return typeof v === 'string'
     ? v.replace(/[^a-zA-ZÀ-ɏ\s'&-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40)
     : '';
+}
+
+export type Diet = 'vegetarian' | 'eggetarian' | 'non-veg';
+
+export const DIETS: { id: Diet; label: string; hint: string }[] = [
+  { id: 'vegetarian', label: 'Vegetarian', hint: 'No meat, fish or eggs' },
+  { id: 'eggetarian', label: 'Eggetarian', hint: 'Vegetarian, plus eggs' },
+  { id: 'non-veg', label: 'Non-veg', hint: 'Meat, fish and eggs too' },
+];
+
+export const DEFAULT_DIET: Diet = 'vegetarian';
+
+export function cleanDiet(v: unknown): Diet {
+  return DIETS.some(d => d.id === v) ? (v as Diet) : DEFAULT_DIET;
+}
+
+/** Good protein-per-calorie foods each diet allows. */
+export const LEAN_PROTEINS: Record<Diet, string> = {
+  vegetarian: 'Greek yogurt, paneer, cottage cheese, tofu, soya chunks, lentils, beans',
+  eggetarian: 'eggs, egg whites, Greek yogurt, paneer, tofu, soya chunks, lentils',
+  'non-veg': 'chicken breast, fish, prawns, eggs, Greek yogurt, tofu, lentils',
+};
+
+const HIDDEN_ANIMAL = 'gelatin, fish sauce, oyster sauce, anchovies, lard, or meat, chicken or fish stock';
+
+/** The diet, as an instruction for the model. */
+export function dietRule(diet: Diet): string {
+  switch (diet) {
+    case 'vegetarian':
+      return `The cook is vegetarian: no meat, poultry, fish, seafood or eggs, and no hidden animal products (${HIDDEN_ANIMAL}). Dairy is fine.`;
+    case 'eggetarian':
+      return `The cook is vegetarian but eats eggs: no meat, poultry, fish or seafood, and no hidden animal products (${HIDDEN_ANIMAL}). Eggs and dairy are fine; include some egg dishes.`;
+    case 'non-veg':
+      return 'The cook eats meat, poultry, fish, seafood and eggs, and wants dishes with them: at least half the dishes MUST be built around meat, poultry, fish, seafood or eggs. The rest can be vegetarian.';
+  }
+}
+
+// Word stems; plurals are matched too. "egg" skips eggplant and eggless, "oyster" skips oyster mushrooms.
+const MEAT_WORDS = [
+  'meat(?!less)', 'chicken', 'beef', 'pork', 'mutton', 'lamb', 'goat(?! cheese| milk)', 'veal', 'venison', 'turkey',
+  'duck', 'goose', 'quail', 'bacon', 'ham', 'sausage', 'salami', 'pepperoni', 'prosciutto', 'chorizo', 'pancetta',
+  'meatball', 'brisket', 'sirloin', 'ribeye', 'bone broth', 'lard', 'gelatine?', 'liver', 'jerky', 'foie gras',
+  'carnitas', 'birria', 'murgh?', 'gosht', 'yakhni', 'nihari', 'haleem', 'rogan josh', 'paya', 'kaleji',
+  'fish', 'salmon', 'tuna', 'cod', 'tilapia', 'sardine', 'anchov(?:y|ie)', 'mackerel', 'pomfret', 'trout',
+  'basa', 'surimi', 'caviar', 'machh?li', 'seafood', 'shrimp', 'prawn', 'jhinga', 'crab', 'lobster', 'squid',
+  'calamari', 'octopus', 'clam', 'mussel', 'scallop', 'oyster(?! mushroom)',
+];
+const EGG_WORDS = ['egg(?![- ]free)', 'omelette?', 'omlette', 'frittata', 'shakshuka', 'quiche', 'anda'];
+const wordsPattern = (words: string[]) => new RegExp(`\\b(?:${words.join('|')})(?:e?s)?\\b`, 'i');
+const MEAT = wordsPattern(MEAT_WORDS);
+const EGG = wordsPattern(EGG_WORDS);
+
+/**
+ * A check on the model's output (and on YouTube titles): true unless the text
+ * names something the diet rules out. Errs towards dropping, so "vegan
+ * chicken" is dropped for a vegetarian too.
+ */
+export function fitsDiet(text: string, diet: Diet): boolean {
+  if (diet === 'non-veg') return true;
+  return !MEAT.test(text) && (diet === 'eggetarian' || !EGG.test(text));
 }

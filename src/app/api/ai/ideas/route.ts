@@ -1,7 +1,16 @@
 import { auth } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
 import { aiErrorResponse, generateJson } from '@/lib/gemini';
-import { cleanCuisine, cleanRefine, type Difficulty, type IdeasResponse, type RecipeIdea } from '@/lib/kitchen-ai';
+import {
+  cleanCuisine,
+  cleanDiet,
+  cleanRefine,
+  dietRule,
+  fitsDiet,
+  type Difficulty,
+  type IdeasResponse,
+  type RecipeIdea,
+} from '@/lib/kitchen-ai';
 import { getAllRecipes } from '@/lib/notion';
 import { popularVideosFor, youtubeConfigured, youtubeSearchUrl } from '@/lib/youtube';
 
@@ -57,9 +66,10 @@ export async function POST(req: Request) {
   // Leaves 20 s of maxDuration for the YouTube lookups that run after Gemini.
   const deadline = Date.now() + (maxDuration - 20) * 1000;
 
-  const body = (await req.json().catch(() => ({}))) as { refine?: unknown; cuisine?: unknown };
+  const body = (await req.json().catch(() => ({}))) as { refine?: unknown; cuisine?: unknown; diet?: unknown };
   const refine = cleanRefine(body.refine);
   const cuisine = cleanCuisine(body.cuisine);
+  const diet = cleanDiet(body.diet);
   const { names, tastes } = await knownDishes(userId);
 
   let raw: RawIdea[];
@@ -71,7 +81,7 @@ export async function POST(req: Request) {
         cuisine
           ? `Every idea must be a ${cuisine} dish; mix meal types and effort levels.`
           : 'Mix cuisines, meal types and effort levels unless the cook asks otherwise.'
-      } Never suggest a dish the cook already has (exact or near-duplicate names). Favour dishes that a home kitchen can realistically make.`,
+      } Never suggest a dish the cook already has (exact or near-duplicate names). Favour dishes that a home kitchen can realistically make.\n\n${dietRule(diet)}`,
       prompt: [
         tastes.length ? `The cook's collection leans towards: ${tastes.join(', ')}. Use this as a taste hint, not a restriction.` : '',
         names.length ? `Dishes the cook already has. Do NOT suggest these:\n${names.map(n => `- ${n}`).join('\n')}` : '',
@@ -86,14 +96,17 @@ export async function POST(req: Request) {
     return aiErrorResponse(err);
   }
 
-  // Drop anything that slipped through as a duplicate of an existing dish.
+  // Drop anything that slipped through as a duplicate of an existing dish, or outside the diet.
   const have = new Set(names.map(n => n.toLowerCase().trim()));
-  const fresh = raw.filter(i => i.name && !have.has(i.name.toLowerCase().trim())).slice(0, IDEA_COUNT);
+  const fresh = raw
+    .filter(i => i.name && !have.has(i.name.toLowerCase().trim()) && fitsDiet(`${i.name}. ${i.searchQuery ?? ''}`, diet))
+    .slice(0, IDEA_COUNT);
+  const keepVideo = (v: { title: string }) => fitsDiet(v.title, diet);
 
   const ideas: RecipeIdea[] = await Promise.all(
     fresh.map(async i => {
       const q = i.searchQuery?.trim() || `${i.name} recipe`;
-      return { ...i, searchQuery: q, searchUrl: youtubeSearchUrl(q), videos: await popularVideosFor(q, 3) };
+      return { ...i, searchQuery: q, searchUrl: youtubeSearchUrl(q), videos: await popularVideosFor(q, 3, keepVideo) };
     })
   );
 
