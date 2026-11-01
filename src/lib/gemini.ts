@@ -10,7 +10,8 @@ import { ApiError, GoogleGenAI } from '@google/genai';
  * Each tier is a fallback chain: the env override first, then current models,
  * then Google's rolling `-latest` alias. If a model is retired (404) or over
  * quota / overloaded (429, 5xx) we move to the next one, so a deprecation
- * doesn't take the feature down.
+ * doesn't take the feature down. If a model is merely slow, the next one is
+ * started alongside it and the first answer wins, all inside one deadline.
  */
 export type ModelTier = 'full' | 'lite';
 
@@ -49,39 +50,107 @@ type GenerateOptions = {
   system: string;
   prompt: string;
   temperature?: number;
-  /** Per-attempt timeout. Keep the sum under the route's maxDuration. */
-  timeoutMs?: number;
+  /**
+   * Epoch ms by which an answer must arrive, across every model tried. Set it
+   * so the route still finishes inside its maxDuration.
+   */
+  deadline?: number;
 };
 
-async function generate(
+/** Used when a caller passes no deadline. */
+const DEFAULT_BUDGET_MS: Record<ModelTier, number> = { full: 50_000, lite: 20_000 };
+
+/**
+ * If a model hasn't answered after this long, start the next one alongside it.
+ * Healthy full-tier answers take 5–25 s; lite ones about 1 s.
+ */
+const HEDGE_MS: Record<ModelTier, number> = { full: 20_000, lite: 5_000 };
+
+/** Not worth starting a model with less time than this left. */
+const MIN_ATTEMPT_MS = 1_000;
+
+function generate(
   opts: GenerateOptions & { schema?: object }
 ): Promise<{ text: string; model: string }> {
   const ai = client();
-  let lastError: unknown;
-  for (const model of modelChain(opts.tier)) {
-    try {
-      const res = await ai.models.generateContent({
-        model,
-        contents: opts.prompt,
-        config: {
-          systemInstruction: opts.system,
-          temperature: opts.temperature ?? 0.7,
-          httpOptions: { timeout: opts.timeoutMs ?? 45_000 },
-          ...(opts.schema
-            ? { responseMimeType: 'application/json', responseJsonSchema: opts.schema }
-            : {}),
-        },
-      });
-      const text = res.text?.trim();
-      if (!text) throw new Error(`Empty response from ${model}`);
-      return { text, model };
-    } catch (err) {
-      lastError = err;
-      if (!isRetryable(err)) break;
-      console.warn(`[gemini] ${model} unavailable (${(err as ApiError).status}); trying next model`);
-    }
-  }
-  throw lastError;
+  const chain = modelChain(opts.tier);
+  const deadline = opts.deadline ?? Date.now() + DEFAULT_BUDGET_MS[opts.tier];
+  // Short budgets hedge sooner, so a slow first model still leaves room for the next.
+  const hedgeMs = Math.min(HEDGE_MS[opts.tier], Math.max(0, (deadline - Date.now()) * 0.4));
+
+  const attempt = async (model: string, signal: AbortSignal, timeoutMs: number) => {
+    const res = await ai.models.generateContent({
+      model,
+      contents: opts.prompt,
+      config: {
+        systemInstruction: opts.system,
+        temperature: opts.temperature ?? 0.7,
+        abortSignal: signal,
+        httpOptions: { timeout: timeoutMs },
+        ...(opts.schema
+          ? { responseMimeType: 'application/json', responseJsonSchema: opts.schema }
+          : {}),
+      },
+    });
+    const text = res.text?.trim();
+    if (!text) throw new Error(`Empty response from ${model}`);
+    return text;
+  };
+
+  return new Promise((resolve, reject) => {
+    const controllers: AbortController[] = [];
+    let next = 0;
+    let running = 0;
+    let done = false;
+    let fatal = false; // a non-retryable error: start no more models
+    let lastError: unknown = new Error('No Gemini model answered before the deadline');
+    let hedge: ReturnType<typeof setTimeout> | undefined;
+
+    const settle = (fn: () => void) => {
+      if (done) return;
+      done = true;
+      clearTimeout(hedge);
+      clearTimeout(expiry);
+      controllers.forEach(c => c.abort()); // stop the models that lost
+      fn();
+    };
+
+    const launch = () => {
+      clearTimeout(hedge);
+      const remaining = deadline - Date.now();
+      if (done || fatal || next >= chain.length || remaining < MIN_ATTEMPT_MS) {
+        if (running === 0) settle(() => reject(lastError));
+        return;
+      }
+      const model = chain[next++];
+      const controller = new AbortController();
+      controllers.push(controller);
+      running++;
+      if (next < chain.length) {
+        hedge = setTimeout(() => {
+          console.warn(`[gemini] ${model} slow after ${Math.round(hedgeMs / 1000)}s; also trying ${chain[next]}`);
+          launch();
+        }, hedgeMs);
+      }
+      attempt(model, controller.signal, remaining).then(
+        text => settle(() => resolve({ text, model })),
+        err => {
+          running--;
+          if (done) return;
+          lastError = err;
+          if (isRetryable(err)) {
+            console.warn(`[gemini] ${model} unavailable (${(err as ApiError).status}); trying next model`);
+          } else {
+            fatal = true;
+          }
+          launch();
+        }
+      );
+    };
+
+    const expiry = setTimeout(() => settle(() => reject(lastError)), Math.max(0, deadline - Date.now()));
+    launch();
+  });
 }
 
 /** Structured output: the response is forced to match `schema` (JSON Schema). */

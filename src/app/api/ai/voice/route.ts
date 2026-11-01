@@ -16,7 +16,7 @@ export async function POST(req: Request) {
       system: `You are a hands-free cooking assistant; your answer is read aloud. Answer questions about the recipe below concisely (1-2 sentences max, plain text, no markdown). Only answer questions about this recipe. Recipe:\n\n${recipeText}`,
       prompt: question,
       temperature: 0.3,
-      timeoutMs: 12_000,
+      deadline: Date.now() + 20_000, // inside maxDuration (30 s)
     });
     return Response.json({ answer });
   } catch (err) {

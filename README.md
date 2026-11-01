@@ -47,7 +47,7 @@ The page body (headings, paragraphs, lists) becomes the recipe content.
 
 ## AI Kitchen (`/kitchen-ai`)
 
-All AI features (AI Kitchen, meal planner, ingredient substitutions, voice assistant) use **Google Gemini** via `@google/genai` (`src/lib/gemini.ts`). If a model is retired or rate-limited, the app moves to the next model in its fallback list.
+All AI features (AI Kitchen, meal planner, ingredient substitutions, voice assistant) use **Google Gemini** via `@google/genai` (`src/lib/gemini.ts`). If a model is retired or rate-limited, the app moves to the next model in its fallback list; if a model is slow, the next one is started alongside it and the first answer wins. Every request has one deadline, set per route so it finishes inside the route's `maxDuration`.
 
 | Tab | What it does | Needs |
 |---|---|---|

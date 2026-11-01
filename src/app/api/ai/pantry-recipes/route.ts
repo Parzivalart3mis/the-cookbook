@@ -10,7 +10,7 @@ import {
   type PantryRecipesResponse,
   type Targets,
 } from '@/lib/kitchen-ai';
-import { formatPantryItem, getPantry, type PantryItem } from '@/lib/tote';
+import { formatPantryItem, getPantry, ingredientWords, matchPantry, type PantryItem } from '@/lib/tote';
 import { youtubeSearchUrl } from '@/lib/youtube';
 
 export const maxDuration = 60;
@@ -81,24 +81,18 @@ type RawRecipe = {
   nutrition: Nutrition;
 };
 
-const norm = (s: string) =>
-  s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean).map(w => w.replace(/(es|s)$/, '')).join(' ');
+const STAPLE_KEYS = new Set(STAPLES.map(s => ingredientWords(s).join(' ')));
+const isStaple = (s: string) => STAPLE_KEYS.has(ingredientWords(s).join(' '));
 
-/** Map a model-written ingredient back to the real pantry item, if there is one. */
-function matchPantry(candidate: string, pantry: PantryItem[]): PantryItem | undefined {
-  const c = norm(candidate);
-  if (!c) return undefined;
-  const exact = pantry.find(p => norm(p.name) === c);
-  if (exact) return exact;
-  const cWords = new Set(c.split(' '));
-  return pantry.find(p => {
-    const pWords = norm(p.name).split(' ');
-    // "chicken breast" ↔ "boneless chicken breasts": every word of the shorter name appears in the longer one.
-    return pWords.length > 0 && (pWords.every(w => cWords.has(w)) || [...cWords].every(w => pWords.includes(w)));
-  });
+/**
+ * True when the calories roughly agree with the macros (4 kcal/g protein and
+ * carbs, 9 kcal/g fat). Asked for an impossible target, the model invents
+ * numbers that hit it ("140 g protein, 140 kcal"); those dishes fail this check.
+ */
+function nutritionAddsUp(n: Nutrition): boolean {
+  const fromMacros = 4 * n.protein + 4 * n.carbs + 9 * n.fat;
+  return n.calories > 0 && Math.abs(n.calories - fromMacros) <= Math.max(40, 0.2 * fromMacros);
 }
-
-const isStaple = (s: string) => STAPLES.includes(norm(s)) || STAPLES.includes(s.toLowerCase().trim());
 
 function finalize(raw: RawRecipe, pantry: PantryItem[]): PantryRecipe {
   const uses = new Map<string, PantryItem>();
@@ -135,7 +129,7 @@ function prompts(mode: PantryMode, pantry: PantryItem[], refine: string, targets
   const base = `You are a practical home-cooking assistant. Suggest dishes the cook can make RIGHT NOW from their pantry. Most ingredients must come from the pantry list; at most 3 missing ingredients per dish, fewer is better. Salt, pepper, water and cooking oil are always available. Items marked [running low] can be used but only in small amounts. In usesFromPantry, copy pantry item names exactly as written. Steps are short and actionable. Nutrition is a realistic per-serving estimate.`;
   const system =
     mode === 'protein'
-      ? `${base}\n\nEvery dish MUST be high-protein and low-calorie: at least ${targets.minProtein} g protein and at most ${targets.maxCalories} kcal per serving. Maximise protein per calorie (lean proteins, eggs, Greek yogurt, legumes, tofu, cottage cheese, etc.). Pick a serving size that makes the numbers honest. Don't shrink portions to hit the targets.`
+      ? `${base}\n\nEvery dish MUST be high-protein and low-calorie: at least ${targets.minProtein} g protein and at most ${targets.maxCalories} kcal per serving. Maximise protein per calorie (lean proteins, eggs, Greek yogurt, legumes, tofu, cottage cheese, etc.). Pick a serving size that makes the numbers honest. Don't shrink portions to hit the targets. Report each dish's real nutrition even if it misses the targets; never adjust the numbers to fit them. Calories must match the macros (4 kcal per g of protein and carbs, 9 per g of fat).`
       : `${base}\n\nVary the dishes (breakfast, mains, snacks; different cuisines) and prefer ones that use up items marked [running low].`;
   const prompt = [
     `Pantry (${pantry.length} items):\n${pantry.map(p => `- ${formatPantryItem(p)}`).join('\n')}`,
@@ -148,6 +142,8 @@ function prompts(mode: PantryMode, pantry: PantryItem[], refine: string, targets
 export async function POST(req: Request) {
   const { userId } = await auth();
   if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  // Counted from the start, so a slow tote read leaves Gemini less time rather than overrunning.
+  const deadline = Date.now() + (maxDuration - 5) * 1000;
 
   const body = (await req.json().catch(() => ({}))) as { mode?: unknown; refine?: unknown; targets?: Partial<Targets> };
   const mode: PantryMode = body.mode === 'protein' ? 'protein' : 'pantry';
@@ -171,6 +167,7 @@ export async function POST(req: Request) {
     const { system, prompt } = prompts(mode, pantry, refine, targets);
     const data = await generateJson<{ recipes: RawRecipe[] }>({
       tier: 'full',
+      deadline,
       system,
       prompt,
       temperature: mode === 'protein' ? 0.6 : 0.8,
@@ -184,9 +181,12 @@ export async function POST(req: Request) {
   let recipes = raw.filter(r => r?.name).map(r => finalize(r, pantry));
 
   if (mode === 'protein') {
-    // The model is asked to hit the targets; this makes them a guarantee.
+    // The model is asked to hit the targets; this makes them a guarantee, and
+    // drops dishes whose numbers contradict themselves.
+    const implausible = recipes.filter(r => !nutritionAddsUp(r.nutrition)).length;
+    if (implausible) console.warn(`[pantry-recipes] dropped ${implausible} dish(es) whose calories don't match their macros`);
     recipes = recipes
-      .filter(r => r.nutrition.protein >= targets.minProtein && r.nutrition.calories > 0 && r.nutrition.calories <= targets.maxCalories)
+      .filter(r => nutritionAddsUp(r.nutrition) && r.nutrition.protein >= targets.minProtein && r.nutrition.calories <= targets.maxCalories)
       .sort((a, b) => b.proteinPer100kcal - a.proteinPer100kcal);
   } else {
     recipes.sort((a, b) => a.missing.length - b.missing.length);

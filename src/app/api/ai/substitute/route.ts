@@ -36,7 +36,7 @@ export async function POST(req: Request) {
       system: 'You are a cooking assistant. Suggest 1-2 practical ingredient substitutions, each with a brief note on how it changes the dish.',
       prompt: `Recipe: ${recipeName}\nIngredient to substitute: ${ingredient}`,
       temperature: 0.4,
-      timeoutMs: 12_000,
+      deadline: Date.now() + 20_000, // inside maxDuration (30 s)
       schema: SCHEMA,
     });
     return Response.json({ substitutes: data.substitutes ?? [] });

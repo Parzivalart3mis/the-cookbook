@@ -12,6 +12,7 @@ type Plan = Record<Day, { slug: string; name: string } | null>;
 export async function POST(req: Request) {
   const { userId } = await auth();
   if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const deadline = Date.now() + (maxDuration - 5) * 1000;
 
   const { preferences, recipes } = await req.json() as { preferences: string; recipes: RecipeInfo[] };
   if (!preferences?.trim() || !recipes?.length) {
@@ -54,6 +55,7 @@ export async function POST(req: Request) {
   try {
     const data = await generateJson<{ plan: Partial<Plan> }>({
       tier: 'full',
+      deadline,
       system: `You are a meal planning assistant. Given a list of recipes and user preferences, assign at most one recipe per day (Monday-Sunday). Set a day to null if the preferences don't call for a meal that day. Use only recipes from the list, with their exact slug and name.`,
       prompt: `User preferences: ${preferences}\n\nAvailable recipes:\n${recipeList}`,
       temperature: 0.5,
