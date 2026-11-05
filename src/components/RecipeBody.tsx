@@ -1,9 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { RotateCcw, Check } from 'lucide-react';
 import type { BlockObjectResponse } from '@notionhq/client/build/src/api-endpoints';
 import { useAuth } from '@clerk/nextjs';
+
+function storeGuestChecklist(slug: string, ids: string[], reset: boolean, legacySlugs: string[]): boolean {
+  try {
+    for (const key of legacySlugs) localStorage.removeItem(`cookbook-checklist-${key}`);
+    if (reset) localStorage.removeItem(`cookbook-checklist-${slug}`);
+    else localStorage.setItem(`cookbook-checklist-${slug}`, JSON.stringify({ ids, savedAt: Date.now() }));
+    return true;
+  } catch { return false; }
+}
 
 type RichTextItem = {
   plain_text: string;
@@ -78,19 +87,33 @@ function groupBlocks(blocks: BlockObjectResponse[]): RenderedGroup[] {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function RecipeBody({
+function RecipeBodyContent({
   blocks,
   slug,
+  legacySlugs = [],
 }: {
   blocks: BlockObjectResponse[];
   slug?: string;
+  legacySlugs?: string[];
 }) {
   const { isSignedIn, isLoaded: authLoaded } = useAuth();
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [saveError, setSaveError] = useState(false);
+  const checkedRef = useRef(new Set<string>());
+  const revision = useRef(0);
+  const writes = useRef(Promise.resolve());
+  const disposed = useRef(false);
+  useEffect(() => {
+    disposed.current = false;
+    return () => { disposed.current = true; };
+  }, []);
+  // Stable effect dependency even when the server passes a new array instance.
+  const legacyKeys = JSON.stringify(legacySlugs);
 
   useEffect(() => {
     if (!slug || !authLoaded) return;
     let cancelled = false;
+    const loadedRevision = revision.current;
 
     /** Server for signed-in users, localStorage otherwise. Returns null if nothing usable. */
     async function loadChecklist(): Promise<string[] | null> {
@@ -98,21 +121,20 @@ export default function RecipeBody({
         try {
           const res = await fetch(`/api/checklist/${slug}`);
           const data = await res.json();
-          return Array.isArray(data.itemIds) ? data.itemIds : null;
+          if (!res.ok) return null;
+          return Array.isArray(data.ids) ? data.ids : Array.isArray(data.itemIds) ? data.itemIds : null;
         } catch {
           return null;
         }
       }
 
       try {
-        const raw = localStorage.getItem(`cookbook-checklist-${slug}`);
-        if (!raw) return null;
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
-        if (parsed && typeof parsed === 'object') {
-          const age = Date.now() - (parsed.savedAt ?? 0);
-          // Signed-out checklists expire after a day.
-          if (age < 24 * 60 * 60 * 1000) return parsed.ids ?? [];
+        for (const key of [slug, ...JSON.parse(legacyKeys) as string[]]) {
+          const raw = localStorage.getItem(`cookbook-checklist-${key}`);
+          if (!raw) continue;
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) return parsed.filter(id => typeof id === 'string');
+          if (parsed && Date.now() - (parsed.savedAt ?? 0) < 24 * 60 * 60 * 1000 && Array.isArray(parsed.ids)) return parsed.ids.filter((id: unknown) => typeof id === 'string');
         }
         return null;
       } catch {
@@ -121,49 +143,56 @@ export default function RecipeBody({
     }
 
     void loadChecklist().then((ids) => {
-      if (!cancelled && ids) setChecked(new Set(ids));
+      if (!cancelled && revision.current === loadedRevision) {
+        const restored = new Set(ids ?? []);
+        checkedRef.current = restored;
+        setChecked(restored);
+      }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [slug, isSignedIn, authLoaded]);
+  }, [slug, isSignedIn, authLoaded, legacyKeys]);
+
+  function persist(ids: string[], reset = false) {
+    if (!slug) return;
+    if (!isSignedIn) {
+      setSaveError(!storeGuestChecklist(slug, ids, reset, legacySlugs));
+      return;
+    }
+    // Serialize snapshots so a slow earlier save cannot overwrite a newer one.
+    writes.current = writes.current.then(async () => {
+      if (disposed.current) return;
+      const res = await fetch(`/api/checklist/${slug}`, reset ? { method: 'DELETE', signal: AbortSignal.timeout(15_000) } : {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }), signal: AbortSignal.timeout(15_000),
+      });
+      if (!res.ok) throw new Error('Checklist save failed');
+      setSaveError(false);
+    }).catch(() => setSaveError(true));
+  }
 
   function toggle(id: string) {
-    setChecked((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      if (slug) {
-        if (isSignedIn) {
-          fetch(`/api/checklist/${slug}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ itemIds: [...next] }),
-          }).catch(() => {});
-        } else {
-          try { localStorage.setItem(`cookbook-checklist-${slug}`, JSON.stringify({ ids: [...next], savedAt: Date.now() })); } catch {}
-        }
-      }
-      return next;
-    });
+    revision.current++;
+    const next = new Set(checkedRef.current);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    checkedRef.current = next;
+    setChecked(next);
+    persist([...next]);
   }
 
   function reset() {
+    revision.current++;
+    checkedRef.current = new Set();
     setChecked(new Set());
-    if (slug) {
-      if (isSignedIn) {
-        fetch(`/api/checklist/${slug}`, { method: 'DELETE' }).catch(() => {});
-      } else {
-        try { localStorage.removeItem(`cookbook-checklist-${slug}`); } catch {}
-      }
-    }
+    persist([], true);
   }
 
   const groups = groupBlocks(blocks);
 
   return (
     <div>
+      {saveError && <p role="alert" className="mb-3 text-sm text-red-600">Progress could not be saved. <button onClick={() => persist([...checkedRef.current])} className="underline">Retry save</button></p>}
       {checked.size > 0 && (
         <div className="flex items-center justify-between mb-4 text-xs text-ink-muted">
           <span>{checked.size} item{checked.size !== 1 ? 's' : ''} checked off</span>
@@ -273,4 +302,10 @@ export default function RecipeBody({
       </div>
     </div>
   );
+}
+
+
+export default function RecipeBody(props: { blocks: BlockObjectResponse[]; slug?: string; legacySlugs?: string[] }) {
+  const { userId } = useAuth();
+  return <RecipeBodyContent key={`${userId ?? 'guest'}:${props.slug}`} {...props} />;
 }

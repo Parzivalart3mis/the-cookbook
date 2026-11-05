@@ -38,9 +38,9 @@ export default function RecipeCard({
       : recipe.prepTime ?? recipe.cookTime ?? null;
 
   const { isSignedIn } = useAuth();
-  const { addToQueue, removeFromQueue, isInQueue } = useQueue();
+  const { addToQueue, removeFromQueue, isInQueue, isSaving: queueSaving, isLoaded: queueLoaded } = useQueue();
   const inQueue = isInQueue(recipe.slug);
-  const { isFavorite, toggleFavorite } = useFavorites();
+  const { isFavorite, toggleFavorite, isSaving: favoritesSaving, isLoaded: favoritesLoaded } = useFavorites();
   const favorited = isFavorite(recipe.slug);
   const reduced = useReducedMotion();
 
@@ -164,6 +164,7 @@ export default function RecipeCard({
           <div className="absolute right-2 top-2 z-10 flex items-center gap-1.5">
             <button
               onClick={handleFavorite}
+              disabled={favoritesSaving || !favoritesLoaded}
               aria-label={
                 favorited ? `Remove ${recipe.name} from favorites` : `Add ${recipe.name} to favorites`
               }
@@ -179,6 +180,7 @@ export default function RecipeCard({
             </button>
             <button
               onClick={handleQueue}
+              disabled={queueSaving || !queueLoaded}
               aria-label={
                 inQueue ? `Remove ${recipe.name} from this week` : `Add ${recipe.name} to this week`
               }

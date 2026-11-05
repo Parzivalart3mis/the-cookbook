@@ -260,12 +260,13 @@ function Macro({ label, value, strong = false }: { label: string; value: string;
 }
 
 
-export function CookbookRecipeCard({ recipe, index }: { recipe: CookbookMatch; index: number }) {
+export function CookbookRecipeCard({ recipe, index, cuisineUnverified = false }: { recipe: CookbookMatch; index: number; cuisineUnverified?: boolean }) {
   return (
     <CardShell index={index}>
       <div className="flex flex-1 flex-col gap-3 p-5">
         <div className="flex flex-wrap gap-1.5">
           <Chip tone="accent">{Math.round(recipe.coverage * 100)}% ingredient match</Chip>
+          {cuisineUnverified && <Chip tone="muted">Cuisine not tagged</Chip>}
           {recipe.prepTime !== null && recipe.cookTime !== null && <Chip><Clock size={11} />{formatMinutes(recipe.prepTime + recipe.cookTime)}</Chip>}
         </div>
         <h3 className="font-display text-lg font-semibold text-ink">{recipe.name}</h3>

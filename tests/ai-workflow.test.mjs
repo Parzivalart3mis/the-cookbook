@@ -1,6 +1,7 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 process.env.COOKBOOK_TEST_MOCKS = '1';
+process.env.COOKBOOK_OWNER_USER_ID = 'test-user';
 process.env.GEMINI_API_KEY = 'fake-test-key';
 process.env.TOTE_API_URL = 'https://pantry.test';
 process.env.TOTE_API_KEY = 'fake-pantry-key';

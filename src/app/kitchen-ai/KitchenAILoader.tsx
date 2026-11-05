@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { useAuth } from '@clerk/nextjs';
 import { Skeleton } from '@/components/Skeleton';
 import type { TabId } from './KitchenAIClient';
 
@@ -21,5 +22,7 @@ const KitchenAIClient = dynamic(() => import('./KitchenAIClient'), {
 });
 
 export default function KitchenAILoader({ initialTab }: { initialTab: TabId }) {
-  return <KitchenAIClient initialTab={initialTab} />;
+  const { userId, isLoaded } = useAuth();
+  if (!isLoaded || !userId) return <div className="p-10"><Skeleton className="h-24 w-full rounded-xl" /></div>;
+  return <KitchenAIClient key={userId} initialTab={initialTab} storageScope={userId} />;
 }

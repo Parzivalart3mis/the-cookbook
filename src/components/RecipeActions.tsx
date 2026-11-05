@@ -10,6 +10,7 @@ import { useAuth } from '@clerk/nextjs';
 import MarkCookedButton from './MarkCookedButton';
 import IngredientSubstitution from './IngredientSubstitution';
 import { extractIngredients, categorize } from '@/lib/ingredients';
+import { canonicalRecipeKey } from '@/lib/recipe-identity';
 import { FEATURES } from '@/lib/features';
 
 /** Module scope: keeps impure calls out of the component body. */
@@ -33,16 +34,16 @@ export default function RecipeActions({
   const [shoppingDone, setShoppingDone] = useState<boolean | null>(null);
   const [shoppingError, setShoppingError] = useState(false);
   const { isSignedIn } = useAuth();
-  const { addToQueue, removeFromQueue, isInQueue } = useQueue();
+  const { addToQueue, removeFromQueue, isInQueue, isSaving: queueSaving, isLoaded: queueLoaded, error: queueError } = useQueue();
   const inQueue = isInQueue(slug);
-  const { isFavorite, toggleFavorite } = useFavorites();
+  const { isFavorite, toggleFavorite, isSaving: favoriteSaving, isLoaded: favoritesLoaded, error: favoriteError } = useFavorites();
   const favorited = isFavorite(slug);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem('cookbook-recently-viewed');
       const list: { slug: string; name: string }[] = raw ? JSON.parse(raw) : [];
-      const updated = [{ slug, name }, ...list.filter(r => r.slug !== slug)].slice(0, 6);
+      const updated = [{ slug, name }, ...list.filter(r => canonicalRecipeKey(r.slug) !== slug)].slice(0, 6);
       localStorage.setItem('cookbook-recently-viewed', JSON.stringify(updated));
     } catch {}
   }, [slug, name]);
@@ -91,6 +92,7 @@ export default function RecipeActions({
         {isSignedIn && (
           <button
             onClick={toggleQueue}
+            disabled={queueSaving || !queueLoaded}
             className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition-colors duration-150 ${
               inQueue
                 ? 'border-accent/50 bg-accent-light text-accent'
@@ -104,6 +106,7 @@ export default function RecipeActions({
         {isSignedIn && (
           <button
             onClick={() => toggleFavorite(slug)}
+            disabled={favoriteSaving || !favoritesLoaded}
             aria-pressed={favorited}
             className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition-colors duration-150 ${
               favorited
@@ -141,6 +144,7 @@ export default function RecipeActions({
         )}
       </div>
 
+      {isSignedIn && (queueError || favoriteError) && <p role="alert" className="mt-2 text-sm text-red-600">{queueError || favoriteError}</p>}
       {isSignedIn && <IngredientSubstitution recipeName={name} />}
     </>
   );

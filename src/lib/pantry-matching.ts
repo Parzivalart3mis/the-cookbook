@@ -1,3 +1,4 @@
+import { recipeCuisineStatus } from './recipe-cuisine';
 import type { RecipeSummary } from './notion';
 import { ingredientWords, matchPantry, type PantryItem } from './tote';
 import { fitsDiet, type Diet, type Targets } from './kitchen-ai';
@@ -36,21 +37,24 @@ export function dishKey(name: string): string {
 export function matchCookbook(recipes: CookbookRecipe[], pantry: PantryItem[], options: MatchOptions) {
   let missingNutrition = 0;
   let missingIngredients = 0;
+  const excluded = { diet: 0, cuisine: 0, meal: 0, time: 0, nutrition: 0, noPantryOverlap: 0 };
+  const cuisineUnknown: CookbookMatch[] = [];
   const meals = ['breakfast', 'lunch', 'dinner', 'dessert', 'snack', 'drink', 'side dish', 'meal prep'];
   const requestedMeals = meals.filter(m => new RegExp(`\\b${m}s?\\b`, 'i').test(options.refine));
   const time = /(?:under|within|less than|max)\s*(\d+)\s*(?:min|minute)/i.exec(options.refine);
   const matches: CookbookMatch[] = [];
   for (const recipe of recipes) {
-    if (!fitsDiet([recipe.name, ...recipe.ingredients].join('. '), options.diet)) continue;
+    if (!fitsDiet([recipe.name, ...recipe.ingredients].join('. '), options.diet)) { excluded.diet++; continue; }
     const labels = [...recipe.tags, ...recipe.mealTypes].map(t => t.toLowerCase());
-    if (options.cuisine && ![recipe.name.toLowerCase(), ...labels].some(t => t.includes(options.cuisine.toLowerCase()))) continue;
-    if (requestedMeals.length && !requestedMeals.some(m => labels.some(t => t === m || t === `${m}s`))) continue;
-    if (time && (recipe.prepTime === null || recipe.cookTime === null || recipe.prepTime + recipe.cookTime > Number(time[1]))) continue;
+    const cuisine = recipeCuisineStatus(recipe, options.cuisine);
+    if (cuisine === 'different') { excluded.cuisine++; continue; }
+    if (requestedMeals.length && !requestedMeals.some(m => labels.some(t => t === m || t === `${m}s`))) { excluded.meal++; continue; }
+    if (time && (recipe.prepTime === null || recipe.cookTime === null || recipe.prepTime + recipe.cookTime > Number(time[1]))) { excluded.time++; continue; }
     if (!recipe.ingredients.length) { missingIngredients++; continue; }
     if (options.protein) {
       const { protein, calories } = recipe.nutrition;
       if (protein === null || calories === null) { missingNutrition++; continue; }
-      if (protein < options.targets.minProtein || calories > options.targets.maxCalories) continue;
+      if (protein < options.targets.minProtein || calories > options.targets.maxCalories) { excluded.nutrition++; continue; }
     }
     const available = new Set<string>();
     const low = new Set<string>();
@@ -66,11 +70,13 @@ export function matchCookbook(recipes: CookbookRecipe[], pantry: PantryItem[], o
       else missing.push(raw);
     }
     // Do not recommend a recipe with no evidence of pantry overlap.
-    if (!found) continue;
-    matches.push({ ...recipe, available: [...available], missing, low: [...low], coverage: total ? found / total : 0 });
+    if (!found) { excluded.noPantryOverlap++; continue; }
+    (cuisine === 'unknown' ? cuisineUnknown : matches).push({ ...recipe, available: [...available], missing, low: [...low], coverage: total ? found / total : 0 });
   }
-  matches.sort((a, b) => b.coverage - a.coverage || a.missing.length - b.missing.length || (options.protein
+  const rank = (a: CookbookMatch, b: CookbookMatch) => b.coverage - a.coverage || a.missing.length - b.missing.length || (options.protein
     ? (b.nutrition.protein! / Math.max(1, b.nutrition.calories!)) - (a.nutrition.protein! / Math.max(1, a.nutrition.calories!))
-    : a.name.localeCompare(b.name)));
-  return { matches: matches.slice(0, 12), missingNutrition, missingIngredients };
+    : a.name.localeCompare(b.name));
+  matches.sort(rank);
+  cuisineUnknown.sort(rank);
+  return { matches: matches.slice(0, 12), cuisineUnknown: cuisineUnknown.slice(0, 12), missingNutrition, missingIngredients, excluded };
 }

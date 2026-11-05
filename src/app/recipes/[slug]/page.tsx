@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import Link from 'next/link';
 import { getAllRecipes, getRecipeBySlug } from '@/lib/notion';
 import RecipeMeta from '@/components/RecipeMeta';
@@ -10,6 +10,7 @@ import RecipeActions from '@/components/RecipeActions';
 import RecipeNotes from '@/components/RecipeNotes';
 import RecipeImageSection from '@/components/RecipeImageSection';
 import VoiceAssistant from '@/components/VoiceAssistant';
+import { recipeReferenceKeys } from '@/lib/recipe-identity';
 
 export const revalidate = 60;
 
@@ -41,6 +42,7 @@ export default async function RecipePage({
   const recipe = await getRecipeBySlug(slug);
 
   if (!recipe) notFound();
+  if (slug !== recipe.slug) permanentRedirect(`/recipes/${recipe.slug}`);
 
   return (
     <MotionPage className="mx-auto max-w-2xl px-4 sm:px-6 py-10 sm:py-14">
@@ -50,6 +52,7 @@ export default async function RecipePage({
       {/* Hero image + image manager (client component for instant updates) */}
       <MotionItem>
         <RecipeImageSection
+          key={recipe.id}
           pageId={recipe.id}
           slug={recipe.slug}
           recipeName={recipe.name}
@@ -113,11 +116,11 @@ export default async function RecipePage({
       </MotionItem>
 
       <MotionItem>
-        <RecipeBody blocks={recipe.blocks} slug={recipe.slug} />
+        <RecipeBody key={recipe.id} blocks={recipe.blocks} slug={recipe.slug} legacySlugs={recipeReferenceKeys(recipe.slug).filter(key => key !== recipe.slug)} />
       </MotionItem>
 
       <MotionItem>
-        <RecipeNotes slug={recipe.slug} />
+        <RecipeNotes key={recipe.id} slug={recipe.slug} />
       </MotionItem>
 
       <VoiceAssistant blocks={recipe.blocks} recipeName={recipe.name} />

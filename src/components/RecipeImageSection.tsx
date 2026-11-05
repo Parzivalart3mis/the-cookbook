@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { ImageIcon, X, Loader2, Check, Link2, RefreshCw, AlertCircle } from 'lucide-react';
-import { useAuth } from '@clerk/nextjs';
+import { useOwnerAccess } from './useOwnerAccess';
 import { useRouter } from 'next/navigation';
 
 type Mode = 'url' | 'unsplash';
@@ -26,7 +26,7 @@ export default function RecipeImageSection({
   recipeName: string;
   initialImage: string | null;
 }) {
-  const { isSignedIn } = useAuth();
+  const { canEditImages } = useOwnerAccess();
   const router = useRouter();
 
   const [image, setImage] = useState<string | null>(initialImage);
@@ -118,7 +118,7 @@ export default function RecipeImageSection({
       )}
 
       {/* Admin controls */}
-      {isSignedIn && (
+      {canEditImages && (
         <div className="flex items-center gap-3 mt-1 mb-2">
           <button
             onClick={handleOpen}

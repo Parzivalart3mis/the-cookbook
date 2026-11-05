@@ -70,7 +70,7 @@ export type PantryRecipesResponse =
       /** Protein mode only: nothing met the targets. */
       noneMatched?: boolean;
     }
-  | { ok: false; pantryError: { reason: 'not-configured' | 'unreachable' | 'empty'; message: string } };
+  | { ok: false; pantryError: { reason: 'not-configured' | 'unreachable' | 'empty' | 'forbidden'; message: string } };
 
 export function clampTargets(t: Partial<Targets> | undefined): Targets {
   const clamp = (v: unknown, lo: number, hi: number, d: number) => {

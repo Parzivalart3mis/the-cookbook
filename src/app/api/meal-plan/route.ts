@@ -1,3 +1,4 @@
+import { canonicalRecipeKey } from '@/lib/recipe-identity';
 import { auth } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
 
@@ -18,7 +19,7 @@ export async function GET(req: Request) {
   for (const row of result.rows) {
     const day = row.day as string;
     if (!plan[day]) plan[day] = [];
-    plan[day].push({ id: row.id as string, slug: row.recipe_slug as string, name: row.recipe_name as string });
+    plan[day].push({ id: row.id as string, slug: canonicalRecipeKey(row.recipe_slug as string), name: row.recipe_name as string });
   }
 
   return Response.json({ plan });
@@ -32,7 +33,7 @@ export async function POST(req: Request) {
 
   await db.execute({
     sql: 'INSERT OR REPLACE INTO meal_plan (id, user_id, recipe_slug, recipe_name, day, week_start, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    args: [id, userId, slug, name, day, weekStart, new Date().toISOString()],
+    args: [id, userId, canonicalRecipeKey(slug), name, day, weekStart, new Date().toISOString()],
   });
 
   return Response.json({ ok: true });

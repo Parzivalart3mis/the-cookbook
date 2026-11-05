@@ -53,3 +53,49 @@ test('cache checks every input, pantry changes, expiry and legacy records', () =
   assert.equal(suggestionsMatch({ at: now, cuisine: '', diet: 'vegetarian' }, current, now), false);
   assert.equal(suggestionsMatch({ ...cached, fingerprint: undefined }, { ...current, tab: 'discover' }, now), true);
 });
+
+test('Hindi and English equivalents match without collapsing ingredient forms or spice blends', async () => {
+  const { matchPantry } = await import('../src/lib/tote.ts');
+  for (const [candidate, pantryName] of [
+    ['haldi', 'Haldi Powder'], ['turmeric powder', 'Haldi Powder'], ['ground turmeric', 'Haldi'],
+    ['jeera', 'Cumin Seeds'], ['ground cumin', 'Jeera Powder'], ['dhaniya powder', 'Coriander Powder'],
+    ['besan', 'Chickpea Flour'], ['sooji', 'Semolina'], ['aata', 'Whole Wheat Flour'], ['dahi', 'Yogurt'],
+    ['chach', 'Buttermilk'], ['tej patta', 'Bay Leaves'], ['heeng', 'Asafoetida'],
+  ]) {
+    assert.equal(matchPantry(candidate, [item(pantryName)])?.name, pantryName);
+    assert.equal(matchPantry(pantryName, [item(candidate)])?.name, candidate);
+  }
+  for (const [candidate, pantryName] of [
+    ['fresh turmeric', 'Haldi Powder'], ['raw haldi', 'Haldi Powder'], ['whole cumin', 'Jeera Powder'],
+    ['jeera', 'Cumin Powder'], ['coriander leaves', 'Dhaniya Powder'], ['garlic', 'Garlic Powder'],
+    ['cheese', 'Cream Cheese'], ['Masale', 'Haldi Powder'], ['Masale', 'Garam Masala Powder'],
+    ['kala chana', 'Chickpeas'], ['dahi', 'Greek Yogurt'],
+  ]) assert.equal(matchPantry(candidate, [item(pantryName)]), undefined, `${candidate} must differ from ${pantryName}`);
+});
+
+test('Indian typo matches while untagged recipes appear separately and known other cuisines stay excluded', () => {
+  const recipes = [
+    recipe({ id: 'typo', tags: ['Indiian'], ingredients: ['1 tsp haldi'] }),
+    recipe({ id: 'untagged', tags: ['Home Recipe'], ingredients: ['1 tsp haldi'] }),
+    recipe({ id: 'chinese', tags: ['Chinese'], ingredients: ['1 tsp haldi'] }),
+    recipe({ id: 'dessert', tags: ['Home Recipe'], mealTypes: ['Dessert'], ingredients: ['haldi'] }),
+  ];
+  const result = matchCookbook(recipes, [item('Haldi Powder')], { ...options, cuisine: 'Indian', refine: 'Dinner' });
+  assert.deepEqual(result.matches.map(r => r.id), ['typo']);
+  assert.deepEqual(result.cuisineUnknown.map(r => r.id), ['untagged']);
+  assert.equal(result.matches[0].coverage, 1);
+  assert.equal(result.excluded.cuisine, 1); assert.equal(result.excluded.meal, 1);
+  const any = matchCookbook(recipes, [item('Haldi Powder')], { ...options, refine: 'Dinner' });
+  assert.equal(any.matches.length, 3); assert.equal(any.cuisineUnknown.length, 0);
+});
+
+test('empty matches report whether diet, metadata, targets or ingredient overlap excluded recipes', () => {
+  const result = matchCookbook([
+    recipe({ name: 'Chicken dinner', ingredients: ['chicken'] }),
+    recipe({ ingredients: ['potatoes'] }),
+    recipe({ id: 'dessert', mealTypes: ['Dessert'] }),
+    recipe({ id: 'slow', cookTime: 60 }),
+  ], [item('rice')], { ...options, refine: 'Dinner under 20 minutes' });
+  assert.equal(result.matches.length, 0); assert.equal(result.excluded.diet, 1);
+  assert.equal(result.excluded.noPantryOverlap, 1); assert.equal(result.excluded.meal, 1); assert.equal(result.excluded.time, 1);
+});

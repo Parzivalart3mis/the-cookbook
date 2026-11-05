@@ -15,16 +15,18 @@ function fmtTime(min: number) {
 }
 
 export default function MealQueueShelf() {
-  const { queue, isLoaded, removeFromQueue, clearQueue } = useQueue();
+  const { queue, isLoaded, removeFromQueue, clearQueue, isSaving, error } = useQueue();
   const { isSignedIn } = useAuth();
   const [open, setOpen] = useState(true);
 
-  if (!isLoaded || !isSignedIn || queue.length === 0) return null;
+  if (!isLoaded || !isSignedIn) return null;
+  if (queue.length === 0) return error ? <p role="alert" className="mb-4 text-sm text-red-600">{error}</p> : null;
 
   const totalMin = queue.reduce((t, i) => t + (i.prepTime ?? 0) + (i.cookTime ?? 0), 0);
 
   return (
     <div className="mb-6 rounded-xl border border-border bg-surface-card overflow-hidden">
+      {error && <p role="alert" className="px-4 pt-3 text-sm text-red-600">{error}</p>}
       <button
         onClick={() => setOpen(o => !o)}
         className="flex w-full items-center justify-between px-4 py-3 text-sm font-semibold text-ink"
@@ -69,13 +71,14 @@ export default function MealQueueShelf() {
                       · {fmtTime((item.prepTime ?? 0) + (item.cookTime ?? 0))}
                     </span>
                   )}
-                  <button onClick={() => removeFromQueue(item.slug)} className="ml-0.5 text-ink-faint hover:text-ink transition-colors">
+                  <button disabled={isSaving} aria-label={`Remove ${item.name} from queue`} onClick={() => removeFromQueue(item.slug)} className="ml-0.5 text-ink-faint hover:text-ink transition-colors">
                     <X size={11} />
                   </button>
                 </div>
               ))}
               <button
                 onClick={() => clearQueue()}
+                disabled={isSaving}
                 className="rounded-full px-3 py-1 text-xs text-ink-faint hover:text-ink transition-colors"
               >
                 Clear all

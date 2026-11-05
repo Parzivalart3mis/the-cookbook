@@ -1,3 +1,4 @@
+import { isOwnerUser } from '@/lib/access';
 import { auth } from '@clerk/nextjs/server';
 
 type UnsplashPhoto = {
@@ -10,6 +11,7 @@ type UnsplashPhoto = {
 export async function GET(req: Request) {
   const { userId } = await auth();
   if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!isOwnerUser(userId)) return Response.json({ error: 'Only the cookbook owner can search recipe images.' }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
   const query = searchParams.get('q');

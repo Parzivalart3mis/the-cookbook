@@ -1,7 +1,7 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@clerk/nextjs';
+import { createContext, useContext, useCallback } from 'react';
+import { useAccountList } from './useAccountList';
 
 export type QueueItem = {
   slug: string;
@@ -13,6 +13,8 @@ export type QueueItem = {
 type QueueContextType = {
   queue: QueueItem[];
   isLoaded: boolean;
+  isSaving: boolean;
+  error: string | null;
   addToQueue: (item: QueueItem) => Promise<void>;
   removeFromQueue: (slug: string) => Promise<void>;
   clearQueue: () => Promise<void>;
@@ -22,6 +24,8 @@ type QueueContextType = {
 const QueueContext = createContext<QueueContextType>({
   queue: [],
   isLoaded: false,
+  isSaving: false,
+  error: null,
   addToQueue: async () => {},
   removeFromQueue: async () => {},
   clearQueue: async () => {},
@@ -29,49 +33,28 @@ const QueueContext = createContext<QueueContextType>({
 });
 
 export function QueueProvider({ children }: { children: React.ReactNode }) {
-  const { isSignedIn, isLoaded: authLoaded } = useAuth();
-  const [queue, setQueue] = useState<QueueItem[]>([]);
-  const [fetched, setFetched] = useState(false);
-
-  // Derived rather than set in an effect: signed-out users have nothing to
-  // fetch, so they are "loaded" as soon as Clerk resolves.
-  const isLoaded = authLoaded && (!isSignedIn || fetched);
-
-  useEffect(() => {
-    if (!authLoaded || !isSignedIn) return;
-    fetch('/api/queue')
-      .then(r => r.json())
-      .then(data => { setQueue(data.queue ?? []); setFetched(true); })
-      .catch(() => setFetched(true));
-  }, [isSignedIn, authLoaded]);
+  const { items: queue, isLoaded, isSaving, error, update } = useAccountList<QueueItem>('/api/queue', 'queue', 'your cooking queue');
 
   const addToQueue = useCallback(async (item: QueueItem) => {
-    if (!isSignedIn) return;
-    setQueue(prev => prev.some(i => i.slug === item.slug) ? prev : [...prev, item]);
-    try { localStorage.setItem('cookbook-queue-ever-used', '1'); } catch {}
-    await fetch('/api/queue', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(item),
+    if (queue.some(i => i.slug === item.slug)) return;
+    const saved = await update([...queue, item], '/api/queue', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item),
     });
-  }, [isSignedIn]);
+    if (saved) { try { localStorage.setItem('cookbook-queue-ever-used', '1'); } catch {} }
+  }, [queue, update]);
 
   const removeFromQueue = useCallback(async (slug: string) => {
-    if (!isSignedIn) return;
-    setQueue(prev => prev.filter(i => i.slug !== slug));
-    await fetch(`/api/queue?slug=${slug}`, { method: 'DELETE' });
-  }, [isSignedIn]);
+    await update(queue.filter(i => i.slug !== slug), `/api/queue?slug=${encodeURIComponent(slug)}`, { method: 'DELETE' });
+  }, [queue, update]);
 
   const clearQueue = useCallback(async () => {
-    if (!isSignedIn) return;
-    setQueue([]);
-    await fetch('/api/queue', { method: 'DELETE' });
-  }, [isSignedIn]);
+    await update([], '/api/queue', { method: 'DELETE' });
+  }, [update]);
 
   const isInQueue = useCallback((slug: string) => queue.some(i => i.slug === slug), [queue]);
 
   return (
-    <QueueContext.Provider value={{ queue, isLoaded, addToQueue, removeFromQueue, clearQueue, isInQueue }}>
+    <QueueContext.Provider value={{ queue, isLoaded, isSaving, error, addToQueue, removeFromQueue, clearQueue, isInQueue }}>
       {children}
     </QueueContext.Provider>
   );

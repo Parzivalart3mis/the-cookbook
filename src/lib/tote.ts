@@ -1,3 +1,6 @@
+import { ingredientAliasKey } from './ingredient-aliases';
+import { isOwnerUser } from './access';
+
 /**
  * Reads your pantry from the tote app (GET /api/integrations/pantry).
  * tote only shares items that are In stock or Running low.
@@ -15,9 +18,10 @@ export type PantryItem = {
 
 export type PantryResult =
   | { ok: true; items: PantryItem[] }
-  | { ok: false; reason: 'not-configured' | 'unreachable'; message: string };
+  | { ok: false; reason: 'not-configured' | 'unreachable' | 'forbidden'; message: string };
 
-export async function getPantry(): Promise<PantryResult> {
+export async function getPantry(userId: string): Promise<PantryResult> {
+  if (!isOwnerUser(userId)) return { ok: false, reason: 'forbidden', message: 'This connected pantry is private to the cookbook owner.' };
   const base = process.env.TOTE_API_URL?.trim().replace(/\/+$/, '');
   const key = process.env.TOTE_API_KEY?.trim();
   if (!base || !key) {
@@ -148,5 +152,11 @@ export function matchPantry(candidate: string, pantry: PantryItem[]): PantryItem
   //    but "cream cheese" ≠ "cheese" and "garlic powder" ≠ "garlic".
   const core = coreKey(ingredientWords(candidate, { dropNotes: true }));
   if (!core) return undefined;
-  return pantry.find(p => coreKey(ingredientWords(p.name, { dropNotes: true })) === core);
+  const described = pantry.find(p => coreKey(ingredientWords(p.name, { dropNotes: true })) === core);
+  if (described) return described;
+
+  // 4. Curated ingredient equivalents, e.g. haldi ↔ turmeric powder. Never
+  // discard form words globally or guess which blend "Masale" means.
+  const alias = ingredientAliasKey(candidate);
+  return alias ? pantry.find(p => ingredientAliasKey(p.name) === alias) : undefined;
 }

@@ -1,3 +1,4 @@
+import { canonicalRecipeKey, stableRecipeId, isAmbiguousRecipeAlias } from './recipe-identity';
 import { Client } from '@notionhq/client';
 import type { BlockObjectResponse, PageObjectResponse } from '@notionhq/client/build/src/api-endpoints';
 
@@ -140,11 +141,7 @@ export async function getAllRecipes(): Promise<RecipeSummary[]> {
     const props = page.properties as Props;
     return {
       id: page.id,
-      slug: slugify(
-        ((props.Name?.title ?? []) as Array<{ plain_text: string }>)
-          .map((t) => t.plain_text)
-          .join('') || 'Untitled'
-      ),
+      slug: stableRecipeId(page.id),
       createdAt: page.created_time,
       ...parseProps(props),
     };
@@ -152,8 +149,12 @@ export async function getAllRecipes(): Promise<RecipeSummary[]> {
 }
 
 export async function getRecipeBySlug(slug: string): Promise<Recipe | null> {
+  if (isAmbiguousRecipeAlias(slug)) return null;
   const all = await getAllRecipes();
-  const summary = all.find((r) => r.slug === slug);
+  const key = canonicalRecipeKey(slug);
+  const direct = all.find(r => r.slug === key);
+  const byName = all.filter(r => slugify(r.name) === slug);
+  const summary = direct ?? (byName.length === 1 ? byName[0] : undefined);
   if (!summary) return null;
 
   return { ...summary, blocks: await getRecipeBlocks(summary.id) };

@@ -5,7 +5,7 @@ import { StickyNote, ChevronDown, Save } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@clerk/nextjs';
 
-export default function RecipeNotes({ slug }: { slug: string }) {
+function RecipeNotesContent({ slug }: { slug: string }) {
   const { isSignedIn, isLoaded: authLoaded } = useAuth();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
@@ -105,4 +105,10 @@ export default function RecipeNotes({ slug }: { slug: string }) {
       </AnimatePresence>
     </div>
   );
+}
+
+
+export default function RecipeNotes(props: { slug: string }) {
+  const { userId } = useAuth();
+  return <RecipeNotesContent key={`${userId ?? 'guest'}:${props.slug}`} {...props} />;
 }

@@ -59,7 +59,7 @@ const TABS: { id: TabId; label: string; short: string; icon: typeof Sparkles; bl
 type Cached<T> = { at: number; data: T; cuisine?: string; diet?: Diet; refine?: string; targets?: Targets; fingerprint?: string };
 type DiscoverData = { ideas: IdeasResponse; trending: TrendingResponse };
 
-const KEY = {
+const STORAGE_KEYS = {
   discover: 'kitchen-ai:v1:discover',
   pantry: 'kitchen-ai:v1:pantry',
   protein: 'kitchen-ai:v1:protein',
@@ -93,7 +93,8 @@ async function readError(res: Response): Promise<string> {
  * Rendered client-only (see KitchenAILoader), so the lazy initialisers below
  * can read localStorage without a hydration mismatch.
  */
-export default function KitchenAIClient({ initialTab }: { initialTab: TabId }) {
+export default function KitchenAIClient({ initialTab, storageScope }: { initialTab: TabId; storageScope: string }) {
+  const KEY = Object.fromEntries(Object.entries(STORAGE_KEYS).map(([name, key]) => [name, `${key}:${storageScope}`])) as Record<keyof typeof STORAGE_KEYS, string>;
   const [tab, setTab] = useState<TabId>(initialTab);
   const [discover, setDiscover] = useState<Cached<DiscoverData> | null>(() => sGet(KEY.discover));
   const [pantry, setPantry] = useState<Cached<PantryRecipesResponse> | null>(() => sGet(KEY.pantry));
@@ -350,12 +351,28 @@ export default function KitchenAIClient({ initialTab }: { initialTab: TabId }) {
             {livePantry.snapshot?.items.length === 0 && <p className="mt-2 text-sm text-ink-muted">Nothing is in stock or running low. Add food in tote, then refresh pantry.</p>}
           </div>
           <h2 className="font-display text-xl font-semibold text-ink">From your recipes</h2>
-          <p className="text-xs text-ink-muted">Matches use saved ingredients, diet, cuisine tags, meal types and requests like “under 20 minutes”. Other free-text instructions apply to new AI dishes. Quantities are not verified; salt, pepper, water and cooking oil are assumed available.</p>
+          <p className="text-xs text-ink-muted">Matches recognize ingredient aliases such as haldi and turmeric powder. Diet, tagged cuisine, meal type and time filters apply. Other requests apply to new AI dishes. Check quantities; basic salt, pepper, water and cooking oil are assumed available.</p>
           {tab === 'protein' && <p className="text-xs text-ink-muted">Saved recipes must have nutrition meeting {targets.minProtein} g protein and at most {targets.maxCalories} kcal per serving.</p>}
           {livePantry.loadingCookbook && <p role="status" className="text-sm text-ink-muted">Checking your saved recipes…</p>}
           {livePantry.cookbookError && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{livePantry.cookbookError}{livePantry.cookbook ? ' Showing previously loaded recipes.' : ''}</p>}
           {cookbookMatches && <>
-            {cookbookMatches.matches.length ? <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{cookbookMatches.matches.map((recipe, index) => <CookbookRecipeCard key={recipe.id} recipe={recipe} index={index} />)}</div> : <p className="text-sm text-ink-muted">No saved recipes matched these filters and pantry items. Try another cuisine or meal type, or explore new dishes below.</p>}
+            {cookbookMatches.matches.length ? <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{cookbookMatches.matches.map((recipe, index) => <CookbookRecipeCard key={recipe.id} recipe={recipe} index={index} />)}</div> : cookbookMatches.cuisineUnknown.length ? null : <p className="text-sm text-ink-muted">No saved recipes matched every filter. Check the reasons below or try Any cuisine.</p>}
+            {cookbookMatches.cuisineUnknown.length > 0 && <div className="space-y-3">
+              <h3 className="font-display text-lg font-semibold text-ink">Cuisine not tagged</h3>
+              <p className="text-sm text-ink-muted">These recipes match your pantry and other filters, but their saved metadata does not confirm {picked} cuisine.</p>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{cookbookMatches.cuisineUnknown.map((recipe, index) => <CookbookRecipeCard key={recipe.id} recipe={recipe} index={index} cuisineUnverified />)}</div>
+            </div>}
+            {Object.values(cookbookMatches.excluded).some(count => count > 0) && <details className="text-xs text-ink-muted">
+              <summary className="cursor-pointer">Why other saved recipes were excluded</summary>
+              <ul className="mt-2 list-disc space-y-1 pl-4">
+                {cookbookMatches.excluded.cuisine > 0 && <li>{cookbookMatches.excluded.cuisine} tagged with a different cuisine.</li>}
+                {cookbookMatches.excluded.meal > 0 && <li>{cookbookMatches.excluded.meal} missing the requested meal-type tag.</li>}
+                {cookbookMatches.excluded.diet > 0 && <li>{cookbookMatches.excluded.diet} outside the selected diet.</li>}
+                {cookbookMatches.excluded.time > 0 && <li>{cookbookMatches.excluded.time} missing timing data or over your time limit.</li>}
+                {cookbookMatches.excluded.nutrition > 0 && <li>{cookbookMatches.excluded.nutrition} outside your protein/calorie targets.</li>}
+                {cookbookMatches.excluded.noPantryOverlap > 0 && <li>{cookbookMatches.excluded.noPantryOverlap} had no recognized non-staple ingredients in your pantry. Unrecognized names and unspecified spice mixes may need more specific names.</li>}
+              </ul>
+            </details>}
             {cookbookMatches.missingNutrition > 0 && <p className="text-xs text-ink-faint">{cookbookMatches.missingNutrition} saved recipes excluded because protein or calories are missing.</p>}
             {cookbookMatches.missingIngredients > 0 && <p className="text-xs text-ink-faint">{cookbookMatches.missingIngredients} saved recipes excluded because no ingredient list could be read.</p>}
           </>}

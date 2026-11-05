@@ -1,11 +1,13 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { useAuth } from '@clerk/nextjs';
+import { createContext, useContext, useCallback, useMemo } from 'react';
+import { useAccountList } from './useAccountList';
 
 type FavoritesContextType = {
   favorites: string[];
   isLoaded: boolean;
+  isSaving: boolean;
+  error: string | null;
   isFavorite: (slug: string) => boolean;
   toggleFavorite: (slug: string) => Promise<void>;
 };
@@ -13,50 +15,27 @@ type FavoritesContextType = {
 const FavoritesContext = createContext<FavoritesContextType>({
   favorites: [],
   isLoaded: false,
+  isSaving: false,
+  error: null,
   isFavorite: () => false,
   toggleFavorite: async () => {},
 });
 
 export function FavoritesProvider({ children }: { children: React.ReactNode }) {
-  const { isSignedIn, isLoaded: authLoaded } = useAuth();
-  const [favorites, setFavorites] = useState<string[]>([]);
-  const [fetched, setFetched] = useState(false);
-
-  // Same shape as QueueProvider: signed-out users are "loaded" once Clerk resolves.
-  const isLoaded = authLoaded && (!isSignedIn || fetched);
-
-  useEffect(() => {
-    if (!authLoaded || !isSignedIn) return;
-    fetch('/api/favorites')
-      .then(r => r.json())
-      .then(data => { setFavorites(data.favorites ?? []); setFetched(true); })
-      .catch(() => setFetched(true));
-  }, [isSignedIn, authLoaded]);
+  const { items: favorites, isLoaded, isSaving, error, update } = useAccountList<string>('/api/favorites', 'favorites', 'your favorites');
 
   const favoriteSet = useMemo(() => new Set(favorites), [favorites]);
   const isFavorite = useCallback((slug: string) => favoriteSet.has(slug), [favoriteSet]);
 
   const toggleFavorite = useCallback(async (slug: string) => {
-    if (!isSignedIn) return;
     const adding = !favoriteSet.has(slug);
-    setFavorites(prev => adding ? [...prev, slug] : prev.filter(s => s !== slug));
-    try {
-      const res = adding
-        ? await fetch('/api/favorites', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ slug }),
-          })
-        : await fetch(`/api/favorites?slug=${encodeURIComponent(slug)}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error();
-    } catch {
-      // Roll back so the star never claims a save that didn't happen
-      setFavorites(prev => adding ? prev.filter(s => s !== slug) : [...prev, slug]);
-    }
-  }, [isSignedIn, favoriteSet]);
+    await update(adding ? [...favorites, slug] : favorites.filter(s => s !== slug),
+      adding ? '/api/favorites' : `/api/favorites?slug=${encodeURIComponent(slug)}`,
+      adding ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slug }) } : { method: 'DELETE' });
+  }, [favorites, favoriteSet, update]);
 
   return (
-    <FavoritesContext.Provider value={{ favorites, isLoaded, isFavorite, toggleFavorite }}>
+    <FavoritesContext.Provider value={{ favorites, isLoaded, isSaving, error, isFavorite, toggleFavorite }}>
       {children}
     </FavoritesContext.Provider>
   );

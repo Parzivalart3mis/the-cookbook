@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { ImageIcon, X, Loader2, Check, Link, RefreshCw } from 'lucide-react';
-import { useAuth } from '@clerk/nextjs';
+import { useOwnerAccess } from './useOwnerAccess';
 import { useRouter } from 'next/navigation';
 
 type Photo = {
@@ -23,7 +23,7 @@ export default function RecipeImageManager({
   recipeName: string;
   hasImage: boolean;
 }) {
-  const { isSignedIn } = useAuth();
+  const { canEditImages } = useOwnerAccess();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [photos, setPhotos] = useState<Photo[]>([]);
@@ -31,7 +31,7 @@ export default function RecipeImageManager({
   const [manualUrl, setManualUrl] = useState('');
   const [saving, setSaving] = useState(false);
 
-  if (!isSignedIn) return null;
+  if (!canEditImages) return null;
 
   async function search() {
     setLoading(true);

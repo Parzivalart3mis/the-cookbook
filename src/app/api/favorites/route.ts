@@ -1,3 +1,4 @@
+import { canonicalRecipeKey, recipeReferenceKeys, keyPlaceholders } from '@/lib/recipe-identity';
 import { auth } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
 
@@ -10,7 +11,7 @@ export async function GET() {
     args: [userId],
   });
 
-  return Response.json({ favorites: result.rows.map(r => r.recipe_slug as string) });
+  return Response.json({ favorites: [...new Set(result.rows.map(r => canonicalRecipeKey(r.recipe_slug as string)))] });
 }
 
 export async function POST(req: Request) {
@@ -22,7 +23,7 @@ export async function POST(req: Request) {
 
   await db.execute({
     sql: 'INSERT OR IGNORE INTO favorites (user_id, recipe_slug) VALUES (?, ?)',
-    args: [userId, slug],
+    args: [userId, canonicalRecipeKey(slug)],
   });
 
   return Response.json({ ok: true });
@@ -37,8 +38,8 @@ export async function DELETE(req: Request) {
   if (!slug) return Response.json({ error: 'slug required' }, { status: 400 });
 
   await db.execute({
-    sql: 'DELETE FROM favorites WHERE user_id = ? AND recipe_slug = ?',
-    args: [userId, slug],
+    sql: `DELETE FROM favorites WHERE user_id = ? AND recipe_slug IN (${keyPlaceholders(recipeReferenceKeys(slug))})`,
+    args: [userId, ...recipeReferenceKeys(slug)],
   });
 
   return Response.json({ ok: true });

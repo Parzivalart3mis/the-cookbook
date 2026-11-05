@@ -7,7 +7,7 @@ function loadEnv() {
     const lines = readFileSync(resolve(process.cwd(), '.env.local'), 'utf8').split('\n');
     for (const line of lines) {
       const m = line.match(/^([^=]+)=(.*)$/);
-      if (m) process.env[m[1].trim()] = m[2].trim();
+      if (m && !m[1].trim().startsWith('#') && process.env[m[1].trim()] === undefined) process.env[m[1].trim()] = m[2].trim().replace(/^['"]|['"]$/g, '');
     }
   } catch {}
 }
@@ -63,6 +63,15 @@ const statements = [
     name TEXT NOT NULL,
     done INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  `CREATE TABLE IF NOT EXISTS meal_plan (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    recipe_slug TEXT NOT NULL,
+    recipe_name TEXT NOT NULL,
+    day TEXT NOT NULL,
+    week_start TEXT NOT NULL,
+    created_at TEXT NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS favorites (
     user_id TEXT NOT NULL,

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { Lightbulb, Plus, Check, Trash2, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAccountList } from '@/components/useAccountList';
 
 type FutureRecipe = {
   id: string;
@@ -12,50 +13,31 @@ type FutureRecipe = {
 };
 
 export default function FutureRecipesPage() {
-  const [items, setItems] = useState<FutureRecipe[]>([]);
+  const { items, isLoaded: mounted, isSaving, error, update } = useAccountList<FutureRecipe>('/api/future-recipes', 'items', 'Future Recipes');
   const [input, setInput] = useState('');
-  const [mounted, setMounted] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    fetch('/api/future-recipes')
-      .then(r => r.json())
-      .then(data => setItems(data.items ?? []))
-      .catch(() => {})
-      .finally(() => setMounted(true));
-  }, []);
 
   async function addItem() {
     const name = input.trim();
-    if (!name) return;
-    setInput('');
-    const res = await fetch('/api/future-recipes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    });
-    const item = await res.json();
-    setItems(prev => [item, ...prev]);
+    if (!name || isSaving) return;
+    const optimistic = { id: crypto.randomUUID(), name, done: false, createdAt: new Date().toISOString() };
+    const saved = await update([optimistic, ...items], '/api/future-recipes', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
+    }, async res => [await res.json(), ...items]);
+    if (saved) setInput('');
     inputRef.current?.focus();
   }
 
   async function toggleDone(id: string, done: boolean) {
-    setItems(prev => prev.map(i => i.id === id ? { ...i, done: !done } : i));
-    await fetch('/api/future-recipes', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, done: !done }),
+    await update(items.map(i => i.id === id ? { ...i, done: !done } : i), '/api/future-recipes', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, done: !done }),
     });
   }
-
   async function remove(id: string) {
-    setItems(prev => prev.filter(i => i.id !== id));
-    await fetch(`/api/future-recipes?id=${id}`, { method: 'DELETE' });
+    await update(items.filter(i => i.id !== id), `/api/future-recipes?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
   }
-
   async function clearDone() {
-    setItems(prev => prev.filter(i => !i.done));
-    await fetch('/api/future-recipes?clearDone=1', { method: 'DELETE' });
+    await update(items.filter(i => !i.done), '/api/future-recipes?clearDone=1', { method: 'DELETE' });
   }
 
   const pending = items.filter(i => !i.done);
@@ -73,6 +55,7 @@ export default function FutureRecipesPage() {
         <p className="text-sm text-ink-muted">Recipes you want to make someday.</p>
       </div>
 
+      {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
       {/* Input */}
       <div className="flex gap-2 mb-8">
         <input
@@ -86,7 +69,7 @@ export default function FutureRecipesPage() {
         />
         <button
           onClick={addItem}
-          disabled={!input.trim()}
+          disabled={!input.trim() || isSaving}
           className="flex items-center gap-1.5 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white px-4 py-2.5 text-sm font-semibold transition-colors"
         >
           <Plus size={15} />

@@ -1,3 +1,4 @@
+import { isOwnerUser } from '@/lib/access';
 import { auth } from '@clerk/nextjs/server';
 import { aiErrorResponse, generateJson } from '@/lib/gemini';
 import {
@@ -154,6 +155,7 @@ function prompts(mode: PantryMode, pantry: PantryItem[], refine: string, targets
 export async function POST(req: Request) {
   const { userId } = await auth();
   if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!isOwnerUser(userId)) return Response.json({ error: 'This connected pantry is private to the cookbook owner.' }, { status: 403 });
   // Counted from the start, so a slow tote read leaves Gemini less time rather than overrunning.
   const requestId = crypto.randomUUID();
   const startedAt = Date.now();
@@ -169,7 +171,7 @@ export async function POST(req: Request) {
   const diet = cleanDiet(body.diet);
 
   const knownPromise = getAllRecipes().then(recipes => ({ recipes, error: false })).catch(() => ({ recipes: [], error: true }));
-  const pantryRes = await getPantry();
+  const pantryRes = await getPantry(userId);
   console.info('[pantry-recipes]', { requestId, event: 'pantry_loaded', elapsedMs: Date.now() - startedAt, ok: pantryRes.ok });
   const checkedAt = Date.now();
   if (!pantryRes.ok) {
