@@ -63,6 +63,7 @@ async function knownDishes(userId: string): Promise<{ names: string[]; tastes: s
 export async function POST(req: Request) {
   const { userId } = await auth();
   if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const requestId = crypto.randomUUID();
   // Leaves 20 s of maxDuration for the YouTube lookups that run after Gemini.
   const deadline = Date.now() + (maxDuration - 20) * 1000;
 
@@ -75,6 +76,7 @@ export async function POST(req: Request) {
   let raw: RawIdea[];
   try {
     const data = await generateJson<{ ideas: RawIdea[] }>({
+      requestId,
       tier: 'full',
       deadline,
       system: `You are a food trend scout for a home cook. Suggest ${IDEA_COUNT} fresh recipe ideas: dishes that are popular or have gone viral on YouTube, TikTok and Instagram food content. ${
@@ -93,7 +95,7 @@ export async function POST(req: Request) {
     });
     raw = data.ideas ?? [];
   } catch (err) {
-    return aiErrorResponse(err);
+    return aiErrorResponse(err, requestId);
   }
 
   // Drop anything that slipped through as a duplicate of an existing dish, or outside the diet.

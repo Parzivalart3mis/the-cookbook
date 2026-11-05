@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
+import type { CookbookMatch } from '@/lib/pantry-matching';
 import { motion, useReducedMotion } from 'framer-motion';
 import {
   AlertTriangle, BookmarkCheck, BookmarkPlus, ChefHat, ChevronDown, Clock, Flame, PlayCircle, ShoppingBasket, Users, Zap,
@@ -171,7 +173,7 @@ export function PantryRecipeCard({
           <Chip><Clock size={11} />{formatMinutes(recipe.timeMinutes)}</Chip>
           <Chip><Users size={11} />{recipe.servings} serving{recipe.servings === 1 ? '' : 's'}</Chip>
           <Chip><ChefHat size={11} />{recipe.difficulty}</Chip>
-          {recipe.missing.length === 0 && <Chip tone="accent">Nothing to buy</Chip>}
+          {recipe.missing.length === 0 && <Chip tone="accent">No missing ingredients listed</Chip>}
         </div>
         <h3 className="font-display text-lg font-semibold leading-snug text-ink">{recipe.name}</h3>
         <p className="mt-1 text-sm text-ink-muted">{recipe.description}</p>
@@ -254,5 +256,40 @@ function Macro({ label, value, strong = false }: { label: string; value: string;
       <p className={`text-sm font-semibold ${strong ? 'text-accent' : 'text-ink'}`}>{value}</p>
       <p className="text-[10px] uppercase tracking-wide text-ink-faint">{label}</p>
     </div>
+  );
+}
+
+
+export function CookbookRecipeCard({ recipe, index }: { recipe: CookbookMatch; index: number }) {
+  return (
+    <CardShell index={index}>
+      <div className="flex flex-1 flex-col gap-3 p-5">
+        <div className="flex flex-wrap gap-1.5">
+          <Chip tone="accent">{Math.round(recipe.coverage * 100)}% ingredient match</Chip>
+          {recipe.prepTime !== null && recipe.cookTime !== null && <Chip><Clock size={11} />{formatMinutes(recipe.prepTime + recipe.cookTime)}</Chip>}
+        </div>
+        <h3 className="font-display text-lg font-semibold text-ink">{recipe.name}</h3>
+        {(recipe.nutrition.protein !== null || recipe.nutrition.calories !== null) && (
+          <p className="text-sm text-ink-muted">
+            {recipe.nutrition.protein !== null && `${recipe.nutrition.protein} g protein`}
+            {recipe.nutrition.protein !== null && recipe.nutrition.calories !== null && ' · '}
+            {recipe.nutrition.calories !== null && `${recipe.nutrition.calories} kcal`}
+            <span className="block text-xs text-ink-faint">Per serving · saved recipe nutrition</span>
+          </p>
+        )}
+        <div>
+          <p className="mb-1 text-xs font-semibold text-ink-muted">In your pantry</p>
+          <div className="flex flex-wrap gap-1.5">{recipe.available.map(name => <Chip key={name} tone={recipe.low.includes(name) ? 'warn' : 'default'}>{name}{recipe.low.includes(name) ? ' · running low' : ''}</Chip>)}</div>
+        </div>
+        {recipe.missing.length > 0 ? (
+          <div>
+            <p className="mb-1 text-xs font-semibold text-ink-muted">Still needed ({recipe.missing.length})</p>
+            <div className="flex flex-wrap gap-1.5">{recipe.missing.map((name, i) => <Chip key={`${name}-${i}`} tone="muted">{name}</Chip>)}</div>
+          </div>
+        ) : <p className="text-sm text-accent">All non-staple ingredients matched.</p>}
+        <p className="text-xs text-ink-faint">Check quantities in the saved recipe before cooking.</p>
+        <Link href={`/recipes/${recipe.slug}`} className="mt-auto pt-2 text-sm font-semibold text-accent hover:text-accent-hover">Open recipe →</Link>
+      </div>
+    </CardShell>
   );
 }

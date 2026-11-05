@@ -1,4 +1,5 @@
-import { ApiError, GoogleGenAI } from '@google/genai';
+import { ApiError, GoogleGenAI, ThinkingLevel } from '@google/genai';
+import { AiOutputError, AiTimeoutError, errorStatus, matchesSchema, retryableAiError } from './ai-errors';
 
 /**
  * One Gemini client for every AI feature in the app.
@@ -39,12 +40,6 @@ function client(): GoogleGenAI {
   return _client;
 }
 
-/** Errors that mean "try the next model", not "give up". */
-function isRetryable(err: unknown): boolean {
-  if (err instanceof ApiError) return err.status === 404 || err.status === 429 || err.status >= 500;
-  return false;
-}
-
 type GenerateOptions = {
   tier: ModelTier;
   system: string;
@@ -55,6 +50,7 @@ type GenerateOptions = {
    * so the route still finishes inside its maxDuration.
    */
   deadline?: number;
+  requestId?: string;
 };
 
 /** Used when a caller passes no deadline. */
@@ -64,7 +60,7 @@ const DEFAULT_BUDGET_MS: Record<ModelTier, number> = { full: 50_000, lite: 20_00
  * If a model hasn't answered after this long, start the next one alongside it.
  * Healthy full-tier answers take 5–25 s; lite ones about 1 s.
  */
-const HEDGE_MS: Record<ModelTier, number> = { full: 20_000, lite: 5_000 };
+const HEDGE_MS: Record<ModelTier, number> = { full: 10_000, lite: 5_000 };
 
 /** Not worth starting a model with less time than this left. */
 const MIN_ATTEMPT_MS = 1_000;
@@ -73,6 +69,8 @@ function generate(
   opts: GenerateOptions & { schema?: object }
 ): Promise<{ text: string; model: string }> {
   const ai = client();
+  const requestId = opts.requestId ?? crypto.randomUUID();
+  const startedAt = Date.now();
   const chain = modelChain(opts.tier);
   const deadline = opts.deadline ?? Date.now() + DEFAULT_BUDGET_MS[opts.tier];
   // Short budgets hedge sooner, so a slow first model still leaves room for the next.
@@ -86,14 +84,25 @@ function generate(
         systemInstruction: opts.system,
         temperature: opts.temperature ?? 0.7,
         abortSignal: signal,
-        httpOptions: { timeout: timeoutMs },
+        // Our fallback chain owns retries and the total deadline. SDK retries
+        // otherwise add hidden backoff inside each model attempt.
+        httpOptions: { timeout: timeoutMs, retryOptions: { attempts: 1 } },
+        // These recipe requests do not need the default medium thinking level.
+        // Keep unknown overrides/rolling aliases on their provider defaults.
+        ...(/^gemini-3[.-]/.test(model) && !model.includes('lite')
+          ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } : {}),
         ...(opts.schema
           ? { responseMimeType: 'application/json', responseJsonSchema: opts.schema }
           : {}),
       },
     });
     const text = res.text?.trim();
-    if (!text) throw new Error(`Empty response from ${model}`);
+    if (!text) throw new AiOutputError('The model returned an empty answer');
+    if (opts.schema) {
+      let data: unknown;
+      try { data = JSON.parse(text); } catch { throw new AiOutputError('The model returned invalid JSON'); }
+      if (!matchesSchema(data, opts.schema)) throw new AiOutputError('The model returned an incomplete answer');
+    }
     return text;
   };
 
@@ -103,7 +112,7 @@ function generate(
     let running = 0;
     let done = false;
     let fatal = false; // a non-retryable error: start no more models
-    let lastError: unknown = new Error('No Gemini model answered before the deadline');
+    let lastError: unknown = new AiTimeoutError('No model answered before the deadline');
     let hedge: ReturnType<typeof setTimeout> | undefined;
 
     const settle = (fn: () => void) => {
@@ -126,29 +135,34 @@ function generate(
       const controller = new AbortController();
       controllers.push(controller);
       running++;
+      const attemptAt = Date.now();
+      console.info('[gemini]', { requestId, event: 'attempt', model, remainingMs: remaining });
       if (next < chain.length) {
         hedge = setTimeout(() => {
-          console.warn(`[gemini] ${model} slow after ${Math.round(hedgeMs / 1000)}s; also trying ${chain[next]}`);
+          console.info('[gemini]', { requestId, event: 'hedge', model, nextModel: chain[next] });
           launch();
         }, hedgeMs);
       }
       attempt(model, controller.signal, remaining).then(
-        text => settle(() => resolve({ text, model })),
+        text => settle(() => {
+          console.info('[gemini]', { requestId, event: 'success', model, attemptMs: Date.now() - attemptAt, totalMs: Date.now() - startedAt });
+          resolve({ text, model });
+        }),
         err => {
           running--;
           if (done) return;
           lastError = err;
-          if (isRetryable(err)) {
-            console.warn(`[gemini] ${model} unavailable (${(err as ApiError).status}); trying next model`);
-          } else {
-            fatal = true;
-          }
+          console.warn('[gemini]', { requestId, event: 'attempt_failed', model, attemptMs: Date.now() - attemptAt, status: errorStatus(err), errorType: err instanceof Error ? err.name : 'unknown' });
+          if (!retryableAiError(err)) fatal = true;
           launch();
         }
       );
     };
 
-    const expiry = setTimeout(() => settle(() => reject(lastError)), Math.max(0, deadline - Date.now()));
+    const expiry = setTimeout(() => settle(() => {
+      console.warn('[gemini]', { requestId, event: 'deadline', totalMs: Date.now() - startedAt });
+      reject(new AiTimeoutError('AI generation exceeded its deadline'));
+    }), Math.max(0, deadline - Date.now()));
     launch();
   });
 }
@@ -159,7 +173,7 @@ export async function generateJson<T>(opts: GenerateOptions & { schema: object }
   try {
     return JSON.parse(text) as T;
   } catch {
-    throw new Error(`${model} returned invalid JSON`);
+    throw new AiOutputError(`${model} returned invalid JSON`);
   }
 }
 
@@ -182,13 +196,20 @@ function quotaMessage(err: ApiError): string {
 }
 
 /** Uniform JSON error for AI route handlers. */
-export function aiErrorResponse(err: unknown): Response {
+export function aiErrorResponse(err: unknown, requestId = crypto.randomUUID()): Response {
   if (err instanceof AiNotConfiguredError) {
-    return Response.json({ error: 'AI is not configured (GEMINI_API_KEY missing).' }, { status: 503 });
+    return Response.json({ error: 'AI is not configured (GEMINI_API_KEY missing).', code: 'not_configured', requestId }, { status: 503 });
   }
-  console.error('[gemini] request failed', err);
+  console.error('[gemini]', { requestId, event: 'request_failed', status: errorStatus(err), errorType: err instanceof Error ? err.name : 'unknown' });
   if (err instanceof ApiError && err.status === 429) {
-    return Response.json({ error: quotaMessage(err) }, { status: 429 });
+    return Response.json({ error: quotaMessage(err), code: 'quota', requestId }, { status: 429 });
   }
-  return Response.json({ error: 'AI request failed, try again.' }, { status: 502 });
+  if (errorStatus(err) === 504 || errorStatus(err) === 408 || err instanceof AiTimeoutError || (err instanceof Error && ['AbortError', 'TimeoutError'].includes(err.name))) {
+    return Response.json({ error: 'AI took too long to answer. Try again; your pantry and saved recipes are still available.', code: 'timeout', requestId }, { status: 504 });
+  }
+  if (err instanceof AiOutputError) return Response.json({ error: 'AI returned an incomplete answer. Please try generating again.', code: 'invalid_output', requestId }, { status: 502 });
+  const status = errorStatus(err);
+  if (status === 400) return Response.json({ error: 'The AI service rejected the request format. Please report this reference so the server configuration can be checked.', code: 'invalid_request', requestId }, { status: 502 });
+  if (status === 401 || status === 403) return Response.json({ error: 'AI access was rejected. Check the server’s Gemini key and permissions.', code: 'access', requestId }, { status: 503 });
+  return Response.json({ error: 'The AI service is temporarily unavailable. Try again shortly.', code: 'unavailable', requestId }, { status: 502 });
 }

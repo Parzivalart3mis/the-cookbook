@@ -63,6 +63,8 @@ export type PantryRecipesResponse =
       ok: true;
       pantry: { count: number; lowCount: number; items: { name: string; low: boolean }[] };
       recipes: PantryRecipe[];
+      fingerprint: string;
+      checkedAt: number;
       /** Protein mode only: the targets actually applied. */
       targets?: Targets;
       /** Protein mode only: nothing met the targets. */

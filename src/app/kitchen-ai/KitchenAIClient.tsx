@@ -1,8 +1,11 @@
 'use client';
 
 import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useKitchenPantry } from '@/components/kitchen/useKitchenPantry';
+import { matchCookbook } from '@/lib/pantry-matching';
+import { suggestionsMatch } from '@/lib/kitchen-cache';
 import { AlertCircle, Dumbbell, Flame, Loader2, Refrigerator, RefreshCw, Sparkles, TrendingUp } from 'lucide-react';
-import { IdeaCard, PantryRecipeCard, VideoCard } from '@/components/kitchen/KitchenCards';
+import { CookbookRecipeCard, IdeaCard, PantryRecipeCard, VideoCard } from '@/components/kitchen/KitchenCards';
 import { Skeleton } from '@/components/Skeleton';
 import {
   CUISINES,
@@ -12,6 +15,7 @@ import {
   TARGET_LIMITS,
   clampTargets,
   cleanDiet,
+  cleanRefine,
   isDefaultTargets,
   type Diet,
   type IdeasResponse,
@@ -52,7 +56,7 @@ const TABS: { id: TabId; label: string; short: string; icon: typeof Sparkles; bl
 ];
 
 /** What the results were generated for. An empty or missing cuisine means any; results saved before diets have none. */
-type Cached<T> = { at: number; data: T; cuisine?: string; diet?: Diet };
+type Cached<T> = { at: number; data: T; cuisine?: string; diet?: Diet; refine?: string; targets?: Targets; fingerprint?: string };
 type DiscoverData = { ideas: IdeasResponse; trending: TrendingResponse };
 
 const KEY = {
@@ -80,7 +84,7 @@ function timeAgo(at: number, now: number): string {
 async function readError(res: Response): Promise<string> {
   try {
     const data = await res.json();
-    if (typeof data?.error === 'string') return data.error;
+    if (typeof data?.error === 'string') return `${data.error}${data.requestId ? ` (Reference: ${data.requestId})` : ''}`;
   } catch {}
   return `Something went wrong (HTTP ${res.status}).`;
 }
@@ -106,7 +110,12 @@ export default function KitchenAIClient({ initialTab }: { initialTab: TabId }) {
   const [loading, setLoading] = useState(EMPTY_FLAGS);
   const [errors, setErrors] = useState(EMPTY_ERRORS);
   const [saved, setSaved] = useState<Set<string>>(() => new Set());
-  const [now] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now());
+  const livePantry = useKitchenPantry(tab);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Mark ideas already in Future Recipes.
   useEffect(() => {
@@ -184,7 +193,8 @@ export default function KitchenAIClient({ initialTab }: { initialTab: TabId }) {
       if (!ideasRes.ok) throw new Error(await readError(ideasRes));
       const ideas = (await ideasRes.json()) as IdeasResponse;
       const trending: TrendingResponse = trendingRes.ok ? await trendingRes.json() : { videos: [], youtube: ideas.youtube };
-      const cached = { at: Date.now(), data: { ideas, trending }, cuisine: picked, diet };
+      const cached = { at: Date.now(), data: { ideas, trending }, cuisine: picked, diet, refine: cleanRefine(refine.discover) };
+      setNow(Date.now());
       setDiscover(cached);
       sSet(KEY.discover, cached);
     } catch (e) {
@@ -199,6 +209,7 @@ export default function KitchenAIClient({ initialTab }: { initialTab: TabId }) {
     setFlag(id, true);
     setError(id, null);
     const picked = cuisine[id];
+    livePantry.refresh(true);
     try {
       const res = await fetch('/api/ai/pantry-recipes', {
         method: 'POST',
@@ -207,7 +218,9 @@ export default function KitchenAIClient({ initialTab }: { initialTab: TabId }) {
       });
       if (!res.ok) throw new Error(await readError(res));
       const data = (await res.json()) as PantryRecipesResponse;
-      const cached = { at: Date.now(), data, cuisine: picked, diet };
+      if (!data.ok) throw new Error(data.pantryError.message);
+      const cached = { at: Date.now(), data, cuisine: picked, diet, refine: cleanRefine(refine[id]), targets: override ?? targets, fingerprint: data.fingerprint };
+      setNow(Date.now());
       if (mode === 'protein') { setProtein(cached); sSet(KEY.protein, cached); }
       else { setPantry(cached); sSet(KEY.pantry, cached); }
     } catch (e) {
@@ -229,7 +242,10 @@ export default function KitchenAIClient({ initialTab }: { initialTab: TabId }) {
   const busy = loading[tab];
   const picked = cuisine[tab];
   // The results on screen are for the picked cuisine and diet, so the button just refreshes them.
-  const matches = !!current && (current.cuisine ?? '') === picked && current.diet === diet;
+  const matches = suggestionsMatch(current, { tab, cuisine: picked, diet, refine: refine[tab], targets, fingerprint: livePantry.error ? undefined : livePantry.snapshot?.fingerprint }, now);
+  const cookbookMatches = tab !== 'discover' && livePantry.snapshot && livePantry.cookbook
+    ? matchCookbook(livePantry.cookbook, livePantry.snapshot.items, { cuisine: picked, diet, refine: refine[tab], protein: tab === 'protein', targets })
+    : null;
   const dietLabel = (d: Diet | undefined) => DIETS.find(x => x.id === d)?.label;
 
   return (
@@ -312,16 +328,45 @@ export default function KitchenAIClient({ initialTab }: { initialTab: TabId }) {
         {current && !busy && (
           <p className="mt-2 text-xs text-ink-faint">
             Generated {timeAgo(current.at, now)}
-            {[current.cuisine, dietLabel(current.diet)].filter(Boolean).map(s => ` · ${s}`).join('')}.
+            {[current.cuisine, dietLabel(current.diet), current.refine ? `Request: ${current.refine}` : ''].filter(Boolean).map(s => ` · ${s}`).join('')}.
             {matches ? ' Refresh for new suggestions.' : ''}
           </p>
         )}
       </div>
 
+      {tab !== 'discover' && (
+        <section className="mb-6 space-y-4" aria-label="Current pantry and saved recipes">
+          <div className="rounded-xl border border-border bg-surface-card p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-ink-muted">
+                {livePantry.snapshot ? `Pantry checked ${timeAgo(livePantry.snapshot.checkedAt, now)} · ${livePantry.snapshot.items.length} items · ${livePantry.snapshot.items.filter(i => i.status === 'LOW').length} running low` : 'Check your current tote pantry'}
+              </p>
+              <button type="button" onClick={() => livePantry.refresh(true)} disabled={livePantry.checking} className="inline-flex items-center gap-1.5 text-sm font-semibold text-accent disabled:opacity-50">
+                <RefreshCw size={14} className={livePantry.checking ? 'animate-spin' : ''} />{livePantry.checking ? 'Checking pantry…' : 'Refresh pantry'}
+              </button>
+            </div>
+            {livePantry.error && <p role="alert" className="mt-2 text-sm text-red-700 dark:text-red-300">{livePantry.error}{livePantry.snapshot ? ' Showing the last checked pantry; matches may be outdated.' : ''}</p>}
+            {livePantry.snapshot && <details className="mt-3 text-sm text-ink-muted"><summary className="cursor-pointer">View pantry items</summary><div className="mt-2 flex flex-wrap gap-1.5">{livePantry.snapshot.items.map((i, index) => <span key={`${i.name}-${index}`} className="rounded bg-surface-hover px-2 py-1 text-xs">{i.name}{i.quantity ? ` · ${i.quantity} ${i.unit ?? ''}` : ''}{i.status === 'LOW' ? ' · running low' : ''}</span>)}</div></details>}
+            {livePantry.snapshot?.items.length === 0 && <p className="mt-2 text-sm text-ink-muted">Nothing is in stock or running low. Add food in tote, then refresh pantry.</p>}
+          </div>
+          <h2 className="font-display text-xl font-semibold text-ink">From your recipes</h2>
+          <p className="text-xs text-ink-muted">Matches use saved ingredients, diet, cuisine tags, meal types and requests like “under 20 minutes”. Other free-text instructions apply to new AI dishes. Quantities are not verified; salt, pepper, water and cooking oil are assumed available.</p>
+          {tab === 'protein' && <p className="text-xs text-ink-muted">Saved recipes must have nutrition meeting {targets.minProtein} g protein and at most {targets.maxCalories} kcal per serving.</p>}
+          {livePantry.loadingCookbook && <p role="status" className="text-sm text-ink-muted">Checking your saved recipes…</p>}
+          {livePantry.cookbookError && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{livePantry.cookbookError}{livePantry.cookbook ? ' Showing previously loaded recipes.' : ''}</p>}
+          {cookbookMatches && <>
+            {cookbookMatches.matches.length ? <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{cookbookMatches.matches.map((recipe, index) => <CookbookRecipeCard key={recipe.id} recipe={recipe} index={index} />)}</div> : <p className="text-sm text-ink-muted">No saved recipes matched these filters and pantry items. Try another cuisine or meal type, or explore new dishes below.</p>}
+            {cookbookMatches.missingNutrition > 0 && <p className="text-xs text-ink-faint">{cookbookMatches.missingNutrition} saved recipes excluded because protein or calories are missing.</p>}
+            {cookbookMatches.missingIngredients > 0 && <p className="text-xs text-ink-faint">{cookbookMatches.missingIngredients} saved recipes excluded because no ingredient list could be read.</p>}
+          </>}
+        </section>
+      )}
+      {tab !== 'discover' && <h2 className="mb-3 font-display text-xl font-semibold text-ink">New dishes to try</h2>}
+      {current && !matches && <p role="status" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">Previous suggestions: the pantry or settings have changed, these results are over a day old, or their pantry has not been verified. Generate suggestions to update them.</p>}
       {errors[tab] && (
         <div className="mb-6 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
           <AlertCircle size={16} className="mt-0.5 shrink-0" />
-          {errors[tab]}
+          <span>{errors[tab]}{current ? ' Previous suggestions are shown below; this attempt did not update them.' : ''}</span>
         </div>
       )}
 
@@ -542,22 +587,7 @@ function PantryResults({
   const { pantry, recipes, targets, noneMatched } = data;
   return (
     <div className="space-y-4">
-      <details className="rounded-xl border border-border bg-surface-card px-4 py-3 text-sm">
-        <summary className="cursor-pointer text-ink-muted">
-          Using <span className="font-semibold text-ink">{pantry.count}</span> items from your tote pantry
-          {pantry.lowCount > 0 && <> · <span className="font-semibold text-amber-700 dark:text-amber-300">{pantry.lowCount} running low</span></>}
-        </summary>
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {pantry.items.map(i => (
-            <span
-              key={i.name}
-              className={`rounded-full px-2 py-0.5 text-xs ${i.low ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300' : 'bg-surface-hover text-ink-muted'}`}
-            >
-              {i.name}
-            </span>
-          ))}
-        </div>
-      </details>
+      <p className="text-xs text-ink-muted">Generated using {pantry.count} pantry items. Nutrition is AI-estimated; check ingredients and quantities before cooking.</p>
 
       {protein && targets && (
         <p className="text-xs text-ink-faint">

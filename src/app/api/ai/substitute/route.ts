@@ -26,12 +26,14 @@ const SCHEMA = {
 export async function POST(req: Request) {
   const { userId } = await auth();
   if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const requestId = crypto.randomUUID();
 
   const { ingredient, recipeName } = await req.json() as { ingredient: string; recipeName: string };
   if (!ingredient?.trim()) return Response.json({ error: 'ingredient required' }, { status: 400 });
 
   try {
     const data = await generateJson<{ substitutes: { name: string; note: string }[] }>({
+      requestId,
       tier: 'lite',
       system: 'You are a cooking assistant. Suggest 1-2 practical ingredient substitutions, each with a brief note on how it changes the dish.',
       prompt: `Recipe: ${recipeName}\nIngredient to substitute: ${ingredient}`,
@@ -41,6 +43,6 @@ export async function POST(req: Request) {
     });
     return Response.json({ substitutes: data.substitutes ?? [] });
   } catch (err) {
-    return aiErrorResponse(err);
+    return aiErrorResponse(err, requestId);
   }
 }

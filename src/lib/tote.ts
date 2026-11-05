@@ -71,7 +71,7 @@ function isFood(i: PantryItem): boolean {
 export function cookableItems(items: PantryItem[]): PantryItem[] {
   return items
     .map(i => ({ ...i, name: i.name.trim() }))
-    .filter(i => i.name && isFood(i));
+    .filter(i => i.name && (i.status === 'IN_STOCK' || i.status === 'LOW') && isFood(i));
 }
 
 export function formatPantryItem(i: PantryItem): string {

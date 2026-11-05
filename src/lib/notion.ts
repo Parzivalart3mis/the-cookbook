@@ -22,6 +22,7 @@ async function queryDatabase(args: {
       'Notion-Version': NOTION_VERSION,
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(10_000),
     next: { revalidate: 60 },
   });
   if (!res.ok) throw new Error(`Notion API error ${res.status}: ${await res.text()}`);
@@ -123,12 +124,19 @@ function parseProps(props: Props): Pick<RecipeSummary, 'name' | 'servings' | 'pr
 }
 
 export async function getAllRecipes(): Promise<RecipeSummary[]> {
-  const response = await queryDatabase({
-    database_id: DATABASE_ID,
-    sorts: [{ property: 'Name', direction: 'ascending' }],
-  });
+  const pages: PageObjectResponse[] = [];
+  let cursor: string | undefined;
+  do {
+    const response = await queryDatabase({
+      database_id: DATABASE_ID,
+      sorts: [{ property: 'Name', direction: 'ascending' }],
+      ...(cursor ? { start_cursor: cursor } : {}),
+    });
+    pages.push(...response.results);
+    cursor = response.has_more ? response.next_cursor ?? undefined : undefined;
+  } while (cursor);
 
-  return response.results.map((page) => {
+  return pages.map((page) => {
     const props = page.properties as Props;
     return {
       id: page.id,
@@ -148,13 +156,17 @@ export async function getRecipeBySlug(slug: string): Promise<Recipe | null> {
   const summary = all.find((r) => r.slug === slug);
   if (!summary) return null;
 
+  return { ...summary, blocks: await getRecipeBlocks(summary.id) };
+}
+
+export async function getRecipeBlocks(pageId: string): Promise<BlockObjectResponse[]> {
   // Paginate block children — Notion returns max 100 per request
   const blocks: BlockObjectResponse[] = [];
   let cursor: string | undefined;
 
   do {
     const res = await notion.blocks.children.list({
-      block_id: summary.id,
+      block_id: pageId,
       page_size: 100,
       ...(cursor ? { start_cursor: cursor } : {}),
     });
@@ -162,5 +174,5 @@ export async function getRecipeBySlug(slug: string): Promise<Recipe | null> {
     cursor = res.has_more ? (res.next_cursor ?? undefined) : undefined;
   } while (cursor);
 
-  return { ...summary, blocks };
+  return blocks;
 }

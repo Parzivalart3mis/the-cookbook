@@ -6,12 +6,14 @@ export const maxDuration = 30;
 export async function POST(req: Request) {
   const { userId } = await auth();
   if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const requestId = crypto.randomUUID();
 
   const { question, recipeText } = await req.json() as { question: string; recipeText: string };
   if (!question?.trim()) return Response.json({ error: 'question required' }, { status: 400 });
 
   try {
     const answer = await generateText({
+      requestId,
       tier: 'lite',
       system: `You are a hands-free cooking assistant; your answer is read aloud. Answer questions about the recipe below concisely (1-2 sentences max, plain text, no markdown). Only answer questions about this recipe. Recipe:\n\n${recipeText}`,
       prompt: question,
@@ -21,7 +23,7 @@ export async function POST(req: Request) {
     return Response.json({ answer });
   } catch (err) {
     // The voice UI speaks whatever `answer` holds, so always return one.
-    if (!(err instanceof AiNotConfiguredError)) console.error('[voice] AI request failed', err);
+    if (!(err instanceof AiNotConfiguredError)) console.error('[voice]', { requestId, errorType: err instanceof Error ? err.name : 'unknown' });
     return Response.json({ answer: 'Sorry, I could not answer that right now.' });
   }
 }

@@ -47,24 +47,40 @@ The page body (headings, paragraphs, lists) becomes the recipe content.
 
 ## AI Kitchen (`/kitchen-ai`)
 
-All AI features (AI Kitchen, meal planner, ingredient substitutions, voice assistant) use **Google Gemini** via `@google/genai` (`src/lib/gemini.ts`). If a model is retired or rate-limited, the app moves to the next model in its fallback list; if a model is slow, the next one is started alongside it and the first answer wins. Every request has one deadline, set per route so it finishes inside the route's `maxDuration`.
+AI Kitchen uses Gemini through `src/lib/gemini.ts`. Requests have one route deadline, try another model on transient errors or invalid output, and start a fallback alongside a slow model. SDK retries are disabled so they cannot add hidden backoff inside this budget. Named Gemini 3 Flash models use low thinking for these short cooking tasks ([Google thinking configuration](https://firebase.google.com/docs/ai-logic/thinking)).
 
-| Tab | What it does | Needs |
+| Tab | Results | Needs |
 |---|---|---|
-| **Discover** | 6 new dishes not already in your cookbook or Future Recipes, each with its most-watched YouTube videos, plus recipe videos that went viral in the last 2 weeks | `GEMINI_API_KEY`, `YOUTUBE_API_KEY` (optional: without it you get YouTube search links) |
-| **From my pantry** | Dishes from the items tote marks **In stock** / **Running low** | `GEMINI_API_KEY`, `TOTE_API_URL`, `TOTE_API_KEY` |
-| **High-protein** | Same pantry, filtered to your targets (default ≥ 25 g protein, ≤ 500 kcal per serving), ranked by protein per calorie. If nothing meets custom targets, it offers to retry with the defaults | same as above |
+| **Discover** | New dishes outside the cookbook and Future Recipes, with YouTube videos and recent trending videos | `GEMINI_API_KEY`; optional `YOUTUBE_API_KEY` |
+| **From my pantry** | **From your recipes:** real saved recipes ranked by pantry ingredient coverage. **New dishes to try:** Gemini suggestions excluding existing cookbook names | tote connection; Gemini only for new dishes |
+| **High-protein** | The same two sections, with protein/calorie filters. Saved recipes use recorded per-serving nutrition; new dishes use AI estimates | same as Pantry |
 
-Every tab also has:
+Pantry is read independently of Gemini. Opening a pantry-based tab or returning to the window checks tote (automatic checks are throttled to once per 30 seconds). **Refresh pantry** checks immediately. New AI generation also starts a pantry check. No AI request runs automatically when stock changes.
 
-- **Cuisine:** Any, Indian, Chinese, Italian, American, or one you type. Each tab remembers its own.
-- **Diet:** Vegetarian (the default), Eggetarian or Non-veg, shared by all tabs. For Vegetarian and Eggetarian, Gemini's dishes are also checked for meat, fish (and egg) words, including hidden ones like fish sauce and gelatin, and YouTube videos are filtered by title the same way (`fitsDiet` in `src/lib/kitchen-ai.ts`).
+The screen distinguishes the current pantry check time from the suggestion generation time. Cached suggestions are marked as previous results when the pantry, cuisine, diet, request text or protein targets change, or after 24 hours. A failed generation keeps the previous suggestions and the independently refreshed pantry/saved-recipe matches.
+
+Saved matches use a five-minute, per-server-process ingredient index with concurrent requests coalesced. Recipe pages remain the source of instructions. Matching recognizes ingredient amounts, optional preparation notes, singular/plural forms and limited spelling variants; it does not verify sufficient quantities. Salt, pepper, water and cooking oil are assumed available. Cuisine matches saved tags/names; meal requests such as “Dinner” match saved meal types, and “under 20 minutes” uses recorded prep/cook times. Other free-text instructions apply to AI generation. Recipes with unreadable ingredients are excluded; High-protein also excludes recipes without recorded protein/calories. The UI reports these exclusions.
+
+Every tab supports cuisine and a shared diet preference (Vegetarian by default, Eggetarian or Non-veg). Generated dishes and videos are checked for excluded animal ingredients with `fitsDiet` in `src/lib/kitchen-ai.ts`. This keyword filter is conservative, not an allergy guarantee.
+
+AI errors include a specific category and request reference. Search server logs for the reference to see model attempts, HTTP status, elapsed time, hedges and deadline exhaustion, without logging prompts, pantry contents or API keys. A provider outage can still prevent new suggestions; saved matches remain available.
 
 Environment variables (see `.env.local.example`):
 
 - `GEMINI_API_KEY`: from [Google AI Studio](https://aistudio.google.com/apikey). Optional `GEMINI_MODEL` / `GEMINI_MODEL_LITE` override the default models.
 - `YOUTUBE_API_KEY`: Google Cloud Console → enable **YouTube Data API v3** → Credentials → API key. Free quota is 10,000 units/day; one Discover refresh costs about 700, and results are cached for 6 h.
 - `TOTE_API_URL` / `TOTE_API_KEY`: your tote URL and the same value as tote's `PANTRY_SHARE_SECRET` (tote also needs `PANTRY_SHARE_USER_ID`).
+
+Run the focused workflow regression tests with Node 22.15+ or Node 24:
+
+```bash
+npm test
+npm run typecheck
+npm run lint
+npm run build
+```
+
+Run typecheck after build rather than concurrently: Next regenerates `.next/types` during a build.
 
 Check your key and models with:
 

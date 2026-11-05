@@ -16,13 +16,12 @@ import {
   type PantryRecipesResponse,
   type Targets,
 } from '@/lib/kitchen-ai';
-import { formatPantryItem, getPantry, ingredientWords, matchPantry, type PantryItem } from '@/lib/tote';
+import { formatPantryItem, getPantry, matchPantry, type PantryItem } from '@/lib/tote';
 import { youtubeSearchUrl } from '@/lib/youtube';
+import { getAllRecipes } from '@/lib/notion';
+import { dishKey, isStaple, pantryFingerprint } from '@/lib/pantry-matching';
 
 export const maxDuration = 60;
-
-/** Assumed to be in every kitchen, so never listed as "missing". */
-const STAPLES = ['salt', 'black pepper', 'pepper', 'water', 'oil', 'cooking oil', 'vegetable oil', 'ice'];
 
 const SHOW = 6;
 /** Protein mode asks for extra candidates because the hard filter drops some. */
@@ -86,9 +85,6 @@ type RawRecipe = {
   steps: string[];
   nutrition: Nutrition;
 };
-
-const STAPLE_KEYS = new Set(STAPLES.map(s => ingredientWords(s).join(' ')));
-const isStaple = (s: string) => STAPLE_KEYS.has(ingredientWords(s).join(' '));
 
 /**
  * True when the calories roughly agree with the macros (4 kcal/g protein and
@@ -159,6 +155,8 @@ export async function POST(req: Request) {
   const { userId } = await auth();
   if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
   // Counted from the start, so a slow tote read leaves Gemini less time rather than overrunning.
+  const requestId = crypto.randomUUID();
+  const startedAt = Date.now();
   const deadline = Date.now() + (maxDuration - 5) * 1000;
 
   const body = (await req.json().catch(() => ({}))) as {
@@ -170,7 +168,10 @@ export async function POST(req: Request) {
   const cuisine = cleanCuisine(body.cuisine);
   const diet = cleanDiet(body.diet);
 
+  const knownPromise = getAllRecipes().then(recipes => ({ recipes, error: false })).catch(() => ({ recipes: [], error: true }));
   const pantryRes = await getPantry();
+  console.info('[pantry-recipes]', { requestId, event: 'pantry_loaded', elapsedMs: Date.now() - startedAt, ok: pantryRes.ok });
+  const checkedAt = Date.now();
   if (!pantryRes.ok) {
     return Response.json({ ok: false, pantryError: { reason: pantryRes.reason, message: pantryRes.message } } satisfies PantryRecipesResponse);
   }
@@ -182,23 +183,32 @@ export async function POST(req: Request) {
     } satisfies PantryRecipesResponse);
   }
 
+  const known = await knownPromise;
+  if (known.error) return Response.json({ error: 'Could not check your cookbook for duplicates. Your pantry is available; try suggestions again shortly.', requestId }, { status: 503 });
+  const existing = new Set(known.recipes.map(r => dishKey(r.name)));
   let raw: RawRecipe[];
   try {
     const { system, prompt } = prompts(mode, pantry, refine, targets, cuisine, diet);
     const data = await generateJson<{ recipes: RawRecipe[] }>({
       tier: 'full',
       deadline,
-      system,
-      prompt,
+      requestId,
+      system: `${system} Suggest only NEW dishes, excluding the cookbook below, including near-duplicate names.`,
+      prompt: `${prompt}\n\nAlready in the cookbook (do not suggest):\n${known.recipes.map(r => r.name).join('\n')}`,
       temperature: mode === 'protein' ? 0.6 : 0.8,
       schema: schema(ASK[mode]),
     });
     raw = data.recipes ?? [];
   } catch (err) {
-    return aiErrorResponse(err);
+    return aiErrorResponse(err, requestId);
   }
 
-  let recipes = raw.filter(r => r?.name).map(r => finalize(r, pantry));
+  let recipes = raw.filter(r => {
+    const key = dishKey(r.name);
+    if (!key || existing.has(key)) return false;
+    existing.add(key);
+    return true;
+  }).map(r => finalize(r, pantry));
 
   // The model is told the diet; this makes it a guarantee.
   const offDiet = recipes.filter(r => !fitsDiet(dishText(r), diet)).map(r => r.name);
@@ -225,6 +235,8 @@ export async function POST(req: Request) {
       items: pantry.map(p => ({ name: p.name, low: p.status === 'LOW' })),
     },
     recipes: recipes.slice(0, SHOW),
+    fingerprint: pantryFingerprint(pantry),
+    checkedAt,
     ...(mode === 'protein' ? { targets, noneMatched: recipes.length === 0 } : {}),
   } satisfies PantryRecipesResponse);
 }
