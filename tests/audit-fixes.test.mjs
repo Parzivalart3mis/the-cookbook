@@ -5,10 +5,12 @@ process.env.COOKBOOK_OWNER_USER_ID = 'owner';
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.TURSO_AUTH_TOKEN = '';
 process.env.NOTION_TOKEN = 'fake-notion-key';
+process.env.TOTE_API_URL = 'https://pantry.test';
+process.env.TOTE_API_KEY = 'fake-pantry-secret';
 process.env.UNSPLASH_ACCESS_KEY = 'fake-unsplash-key';
 const { db } = await import('../src/lib/db.ts');
 const { isOwnerUser } = await import('../src/lib/access.ts');
-const { getPantry } = await import('../src/lib/tote.ts');
+const { getPantry } = await import('../src/lib/tote-server.ts');
 const { unsplashDownloadUrl } = await import('../src/lib/image-security.ts');
 const { canonicalRecipeKey, recipeReferenceKeys, stableRecipeId } = await import('../src/lib/recipe-identity.ts');
 const { getAllRecipes, getRecipeBySlug } = await import('../src/lib/notion.ts');
@@ -34,6 +36,7 @@ for (const sql of [
 ]) await db.execute(sql);
 let calls = [];
 beforeEach(async () => {
+  globalThis.testClerkUser = undefined;
   globalThis.testUser = 'owner'; calls = []; invalidations.length = 0;
   for (const table of ['recipe_checklists', 'recipe_notes', 'favorites', 'cooked_history', 'meal_queue']) await db.execute(`DELETE FROM ${table}`);
   globalThis.testNotionBlocks = async () => ({ results: [], has_more: false });
@@ -43,9 +46,10 @@ beforeEach(async () => {
   };
 });
 
-test('owner configuration fails closed and pantry refuses other users before network access', async () => {
+test('image ownership remains closed without configuration; pantry accepts a different verified account', async () => {
   assert.equal(isOwnerUser('owner'), true); assert.equal(isOwnerUser('visitor'), false);
-  const blocked = await getPantry('visitor'); assert.equal(blocked.reason, 'forbidden'); assert.equal(calls.length, 0);
+  globalThis.fetch = async () => Response.json({ protocolVersion: 2, connectionId: 'a'.repeat(64), items: [] });
+  const linked = await getPantry('visitor'); assert.equal(linked.ok, true);
   const saved = process.env.COOKBOOK_OWNER_USER_ID; delete process.env.COOKBOOK_OWNER_USER_ID;
   assert.equal(isOwnerUser('owner'), false); process.env.COOKBOOK_OWNER_USER_ID = saved;
 });

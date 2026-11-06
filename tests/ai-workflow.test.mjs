@@ -20,9 +20,10 @@ const page = (name = 'Lentil Soup') => ({ id: name, created_time: '2026-01-01', 
 const block = (type, text) => ({ id: text, type, [type]: { rich_text: [{ plain_text: text }] } });
 const dish = (name = 'New Lentil Stew') => ({ name, description: 'Dinner', timeMinutes: 20, servings: 2, difficulty: 'Easy', usesFromPantry: ['lentils'], missing: [], steps: ['Boil lentils.', 'Serve.'], nutrition: { protein: 30, calories: 300, carbs: 30, fat: 6 } });
 beforeEach(() => {
+  globalThis.testClerkUser = undefined;
   calls.length = 0; outcomes.length = 0; globalThis.testUser = 'test-user';
   globalThis.testNotionBlocks = async () => ({ results: [block('heading_2', 'Ingredients'), block('bulleted_list_item', '1 cup lentils')], has_more: false });
-  globalThis.fetch = async (url) => Response.json(String(url).includes('pantry.test') ? { items: pantryItems } : { results: [page()], has_more: false });
+  globalThis.fetch = async (url) => Response.json(String(url).includes('pantry.test') ? { protocolVersion: 2, connectionId: 'a'.repeat(64), items: pantryItems } : { results: [page()], has_more: false });
 });
 
 test('invalid JSON, schema mismatch and empty output fall back before accepting an answer', async () => {
@@ -54,7 +55,7 @@ test('deadline errors are explicit and include a request reference', async () =>
 });
 test('pantry-only endpoint stays fresh when AI fails and requires authentication', async () => {
   const first = await (await getPantry()).json(); assert.equal(first.items.length, 1);
-  globalThis.fetch = async () => Response.json({ items: [...pantryItems, { ...pantryItems[0], name: 'tomatoes' }] });
+  globalThis.fetch = async () => Response.json({ protocolVersion: 2, connectionId: 'a'.repeat(64), items: [...pantryItems, { ...pantryItems[0], name: 'tomatoes' }] });
   const second = await (await getPantry()).json(); assert.notEqual(first.fingerprint, second.fingerprint);
   assert.equal(second.items.length, 2); assert.equal(calls.length, 0);
   globalThis.testUser = null; assert.equal((await getPantry()).status, 401);
@@ -89,13 +90,13 @@ test('cookbook index coalesces requests and caches extracted saved ingredients',
 });
 
 test('empty or disconnected pantry returns an actionable result without AI calls', async () => {
-  globalThis.fetch = async (url) => Response.json(String(url).includes('pantry.test') ? { items: [] } : { results: [page()], has_more: false });
+  globalThis.fetch = async (url) => Response.json(String(url).includes('pantry.test') ? { protocolVersion: 2, connectionId: 'a'.repeat(64), items: [] } : { results: [page()], has_more: false });
   const empty = await (await generatePantry(new Request('https://app.test', { method: 'POST', body: '{}' }))).json();
   assert.equal(empty.pantryError.reason, 'empty'); assert.equal(calls.length, 0);
   globalThis.fetch = async (url) => String(url).includes('pantry.test') ? new Response('', { status: 401 }) : Response.json({ results: [page()], has_more: false });
   const disconnected = await (await getPantry()).json();
   assert.equal(disconnected.ok, false); assert.equal(disconnected.reason, 'unreachable');
-  assert.match(disconnected.message, /rejected the key/); assert.equal(calls.length, 0);
+  assert.match(disconnected.message, /could not authenticate/); assert.equal(calls.length, 0);
 });
 
 test('new suggestions remove duplicate names within the same generated batch', async () => {

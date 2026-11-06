@@ -14,8 +14,9 @@ const stapleKeys = new Set(STAPLES.map(s => ingredientWords(s).join(' ')));
 export const isStaple = (s: string) => stapleKeys.has(ingredientWords(s).join(' '));
 
 /** Include quantities and status, and ignore ordering. Never expose the sharing secret. */
-export function pantryFingerprint(items: PantryItem[]): string {
-  return JSON.stringify(items.map(i => [i.name.trim().toLowerCase(), i.quantity, i.unit, i.status, i.category]).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))));
+export function pantryFingerprint(items: PantryItem[], connectionId?: string): string {
+  const content = JSON.stringify(items.map(i => [i.name.trim().toLowerCase(), i.quantity, i.unit, i.status, i.category]).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))));
+  return connectionId ? JSON.stringify([connectionId, content]) : content;
 }
 
 /** Remove amounts/preparation notes while preserving identity: garlic powder != garlic. */

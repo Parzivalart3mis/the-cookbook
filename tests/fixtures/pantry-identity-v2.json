@@ -1,0 +1,7 @@
+{
+  "secret": "test-contract-secret",
+  "now": 1800000000000,
+  "subject": "cookbook-contract-user",
+  "email": "Person.Name+pantry@Example.com",
+  "token": "eyJ2ZXJzaW9uIjoyLCJpc3N1ZXIiOiJ0aGUtY29va2Jvb2siLCJhdWRpZW5jZSI6InRvdGUtcGFudHJ5Iiwic3ViamVjdCI6ImNvb2tib29rLWNvbnRyYWN0LXVzZXIiLCJlbWFpbCI6InBlcnNvbi5uYW1lK3BhbnRyeUBleGFtcGxlLmNvbSIsImlzc3VlZEF0IjoxODAwMDAwMDAwLCJleHBpcmVzQXQiOjE4MDAwMDAwNjB9.80QAhKsh-6yqHVjYtmPVDdhAw1S5SHm7ZbPVIvMQG1g"
+}

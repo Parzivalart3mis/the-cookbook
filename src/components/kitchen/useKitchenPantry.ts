@@ -10,6 +10,7 @@ export function useKitchenPantry(tab: string) {
   const [snapshot, setSnapshot] = useState<PantrySnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  const [linkBlocked, setLinkBlocked] = useState(false);
   const [cookbook, setCookbook] = useState<CookbookRecipe[] | null>(null);
   const [cookbookError, setCookbookError] = useState<string | null>(null);
   const [loadingCookbook, setLoadingCookbook] = useState(false);
@@ -28,8 +29,14 @@ export function useKitchenPantry(tab: string) {
         try {
           const res = await fetch('/api/pantry', { cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20_000)]) });
           const data = await res.json();
-          if (!res.ok || !data.ok) throw new Error(data.message ?? data.error ?? 'Could not check pantry. Try Refresh pantry.');
-          if (!controller.signal.aborted) { setSnapshot(data); setError(null); }
+          if (!res.ok || !data.ok) {
+            if (!controller.signal.aborted && (['verify-email', 'not-linked', 'ambiguous-account'].includes(data.reason) || [401, 403, 404, 409].includes(res.status))) {
+              setSnapshot(null);
+              setLinkBlocked(true);
+            }
+            throw new Error(data.message ?? data.error ?? 'Could not check pantry. Try Refresh pantry.');
+          }
+          if (!controller.signal.aborted) { setSnapshot(data); setError(null); setLinkBlocked(false); }
         } catch (e) {
           if (!controller.signal.aborted) setError(e instanceof Error && e.name !== 'TimeoutError' ? e.message : 'Pantry check timed out. Try Refresh pantry.');
         } finally {
@@ -73,5 +80,5 @@ export function useKitchenPantry(tab: string) {
     indexRequest.current?.abort(); indexRequest.current = null;
   }, []);
 
-  return { snapshot, error, checking, cookbook, cookbookError, loadingCookbook, refresh };
+  return { snapshot, error, checking, linkBlocked, cookbook, cookbookError, loadingCookbook, refresh };
 }

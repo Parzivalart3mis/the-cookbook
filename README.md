@@ -25,7 +25,7 @@ TURSO_AUTH_TOKEN=<Turso token>
 COOKBOOK_OWNER_USER_ID=<your Clerk user ID>
 ```
 
-Create a Clerk application and a Turso database, then copy their credentials above. Set `COOKBOOK_OWNER_USER_ID` to the owner's exact Clerk user ID from the Clerk dashboard. Image editing and the connected tote pantry deny access when this value is empty, and are available only to that user. Discover and personal saved data remain available to other signed-in users. Never put a server secret in a `NEXT_PUBLIC_` variable.
+Create a Clerk application and a Turso database, then copy their credentials above. Set `COOKBOOK_OWNER_USER_ID` to the owner's exact Clerk user ID from the Clerk dashboard. Shared image editing denies access when this value is empty and is available only to that user. Pantry linking is available to every signed-in person with a verified primary email and a matching verified tote account. Never put a server secret in a `NEXT_PUBLIC_` variable.
 
 Initialize all database tables (safe to run again):
 
@@ -70,7 +70,7 @@ AI Kitchen uses Gemini through `src/lib/gemini.ts`. Requests have one route dead
 | **From my pantry** | **From your recipes:** real saved recipes ranked by pantry ingredient coverage. **New dishes to try:** Gemini suggestions excluding existing cookbook names | tote connection; Gemini only for new dishes |
 | **High-protein** | The same two sections, with protein/calorie filters. Saved recipes use recorded per-serving nutrition; new dishes use AI estimates | same as Pantry |
 
-The connected tote pantry belongs to one tote account and is available only to `COOKBOOK_OWNER_USER_ID`. AI results are cached separately for each signed-in account. Pantry is read independently of Gemini. Opening a pantry-based tab or returning to the window checks tote (automatic checks are throttled to once per 30 seconds). **Refresh pantry** checks immediately. New AI generation also starts a pantry check. No AI request runs automatically when stock changes.
+Each person's tote pantry connects through their verified Cookbook primary email. Cookbook obtains the email from Clerk on the server and sends a signed assertion valid for 60 seconds; tote checks its own Clerk directory for exactly one matching, verified account. Clerk IDs may differ between apps. Email case and surrounding whitespace are normalized; Gmail dots and plus aliases are not merged. No account match or unverified/ambiguous emails fail closed, with no fallback to an owner's pantry. This changes pantry selection only; the Notion cookbook remains shared. AI results are cached separately for each signed-in account, and fingerprints include an opaque connection ID. Pantry is read independently of Gemini. Opening a pantry-based tab or returning to the window checks tote (automatic checks are throttled to once per 30 seconds). **Refresh pantry** checks immediately. New AI generation also starts a pantry check. No AI request runs automatically when stock changes.
 
 The screen distinguishes the current pantry check time from the suggestion generation time. Cached suggestions are marked as previous results when the pantry, cuisine, diet, request text or protein targets change, or after 24 hours. A failed generation keeps the previous suggestions and the independently refreshed pantry/saved-recipe matches.
 
@@ -84,7 +84,7 @@ Environment variables (see `.env.local.example`):
 
 - `GEMINI_API_KEY`: from [Google AI Studio](https://aistudio.google.com/apikey). Optional `GEMINI_MODEL` / `GEMINI_MODEL_LITE` override the default models.
 - `YOUTUBE_API_KEY`: Google Cloud Console → enable **YouTube Data API v3** → Credentials → API key. Free quota is 10,000 units/day; one Discover refresh costs about 700, and results are cached for 6 h.
-- `TOTE_API_URL` / `TOTE_API_KEY`: your tote URL and the same value as tote's `PANTRY_SHARE_SECRET` (tote also needs `PANTRY_SHARE_USER_ID`).
+- `TOTE_API_URL` / `TOTE_API_KEY`: your tote URL and the same value as tote's `PANTRY_SHARE_SECRET`. `PANTRY_SHARE_USER_ID` is no longer used.
 
 Run the focused workflow regression tests with Node 22.15+ or Node 24:
 
@@ -134,4 +134,13 @@ Recipe edits in Notion show up on the live site within ~60 seconds (`revalidate 
 
 New recipe links and saved-data keys use the Notion page ID, so changing a title does not change identity and duplicate names cannot collide. `src/data/recipe-aliases.json` preserves the title-based links in use before the transition. Legacy URLs redirect to permanent URLs. Notes, checklists, favorites, queue entries, cooked history and meal-plan references read old aliases alongside permanent IDs; new saves use permanent IDs. No destructive database migration is needed. Removing saved state removes both key forms so old records cannot reappear.
 
-The alias snapshot must be retained. If an older title is missing, add its slug and the same Notion page ID to the snapshot. Ambiguous legacy names cannot be assigned automatically; their data is left untouched. Anonymous checklists also read old localStorage keys. Other existing signed-in users keep their private saved data, but receive no access to the owner's pantry or image controls.
+The alias snapshot must be retained. If an older title is missing, add its slug and the same Notion page ID to the snapshot. Ambiguous legacy names cannot be assigned automatically; their data is left untouched. Anonymous checklists also read old localStorage keys. Other signed-in users keep their private saved data and link to their own verified-email tote account. Shared image controls remain owner-only.
+
+## Verified-email pantry linking rollout
+
+1. Set the same long random server secret as `PANTRY_SHARE_SECRET` in tote and `TOTE_API_KEY` in Cookbook. Keep `TOTE_API_URL` pointed at the tote deployment. These values never go to the browser.
+2. Deploy tote's protocol-v2 `POST /api/integrations/pantry` first, then deploy Cookbook. The old fixed-owner GET feed returns 410. Cookbook refuses responses without version 2 and a connection ID.
+3. Each person signs into both apps with the same verified email (Cookbook uses the verified primary email; tote accepts a matching verified address). Pantry refresh links automatically; no per-user environment variables or database migration are needed.
+4. Missing or unverified links clear the current pantry snapshot and hide old pantry suggestions. Temporary outages keep clearly labeled older results. Changes to the matching tote account invalidate cached suggestions even if the food list is identical.
+
+Both applications test the same signed-token contract fixture. The integration is read-only and shares only in-stock/running-low food names, quantities, units and categories. It does not share notes, shopping lists, identifiers or email addresses in the response. The signed identity travels only in the Authorization header over the configured server connection, not in URLs or logs.

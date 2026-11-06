@@ -60,13 +60,13 @@ type Cached<T> = { at: number; data: T; cuisine?: string; diet?: Diet; refine?: 
 type DiscoverData = { ideas: IdeasResponse; trending: TrendingResponse };
 
 const STORAGE_KEYS = {
-  discover: 'kitchen-ai:v1:discover',
-  pantry: 'kitchen-ai:v1:pantry',
-  protein: 'kitchen-ai:v1:protein',
-  targets: 'kitchen-ai:v1:targets',
-  refine: 'kitchen-ai:v1:refine',
-  cuisine: 'kitchen-ai:v1:cuisine',
-  diet: 'kitchen-ai:v1:diet',
+  discover: 'kitchen-ai:v2:discover',
+  pantry: 'kitchen-ai:v2:pantry',
+  protein: 'kitchen-ai:v2:protein',
+  targets: 'kitchen-ai:v2:targets',
+  refine: 'kitchen-ai:v2:refine',
+  cuisine: 'kitchen-ai:v2:cuisine',
+  diet: 'kitchen-ai:v2:diet',
 } as const;
 
 const EMPTY_FLAGS: Record<TabId, boolean> = { discover: false, pantry: false, protein: false };
@@ -238,7 +238,7 @@ export default function KitchenAIClient({ initialTab, storageScope }: { initialT
   }
 
   const run = () => (tab === 'discover' ? runDiscover() : runPantry(tab));
-  const current = tab === 'discover' ? discover : tab === 'pantry' ? pantry : protein;
+  const current = tab === 'discover' ? discover : livePantry.linkBlocked ? null : tab === 'pantry' ? pantry : protein;
   const meta = TABS.find(t => t.id === tab)!;
   const busy = loading[tab];
   const picked = cuisine[tab];
@@ -338,6 +338,7 @@ export default function KitchenAIClient({ initialTab, storageScope }: { initialT
       {tab !== 'discover' && (
         <section className="mb-6 space-y-4" aria-label="Current pantry and saved recipes">
           <div className="rounded-xl border border-border bg-surface-card p-4">
+            <p className="mb-2 text-xs text-ink-muted">Your tote pantry connects through your verified Cookbook email.</p>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-ink-muted">
                 {livePantry.snapshot ? `Pantry checked ${timeAgo(livePantry.snapshot.checkedAt, now)} · ${livePantry.snapshot.items.length} items · ${livePantry.snapshot.items.filter(i => i.status === 'LOW').length} running low` : 'Check your current tote pantry'}
@@ -392,9 +393,9 @@ export default function KitchenAIClient({ initialTab, storageScope }: { initialT
       ) : (
         <div className={busy ? 'pointer-events-none opacity-50 transition-opacity' : 'transition-opacity'}>
           {tab === 'discover' && (discover ? <DiscoverResults data={discover.data} cuisine={discover.cuisine} isSaved={isSaved} onSave={saveIdea} /> : <EmptyState tab="discover" />)}
-          {tab === 'pantry' && (pantry ? <PantryResults data={pantry.data} diet={pantry.diet ?? diet} isSaved={isSaved} onSave={saveIdea} /> : <EmptyState tab="pantry" />)}
+          {tab === 'pantry' && (livePantry.linkBlocked ? <Notice title="Connect your tote account" body="Use the same verified email in Cookbook and tote, then refresh pantry." /> : pantry ? <PantryResults data={pantry.data} diet={pantry.diet ?? diet} isSaved={isSaved} onSave={saveIdea} /> : <EmptyState tab="pantry" />)}
           {tab === 'protein' && (
-            protein ? (
+            livePantry.linkBlocked ? <Notice title="Connect your tote account" body="Use the same verified email in Cookbook and tote, then refresh pantry." /> : protein ? (
               <PantryResults
                 data={protein.data}
                 diet={protein.diet ?? diet}

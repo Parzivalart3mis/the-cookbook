@@ -1,4 +1,4 @@
-import { isOwnerUser } from '@/lib/access';
+import { getPantry, pantryFailureStatus } from '@/lib/tote-server';
 import { auth } from '@clerk/nextjs/server';
 import { aiErrorResponse, generateJson } from '@/lib/gemini';
 import {
@@ -17,7 +17,7 @@ import {
   type PantryRecipesResponse,
   type Targets,
 } from '@/lib/kitchen-ai';
-import { formatPantryItem, getPantry, matchPantry, type PantryItem } from '@/lib/tote';
+import { formatPantryItem, matchPantry, type PantryItem } from '@/lib/tote';
 import { youtubeSearchUrl } from '@/lib/youtube';
 import { getAllRecipes } from '@/lib/notion';
 import { dishKey, isStaple, pantryFingerprint } from '@/lib/pantry-matching';
@@ -155,7 +155,6 @@ function prompts(mode: PantryMode, pantry: PantryItem[], refine: string, targets
 export async function POST(req: Request) {
   const { userId } = await auth();
   if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
-  if (!isOwnerUser(userId)) return Response.json({ error: 'This connected pantry is private to the cookbook owner.' }, { status: 403 });
   // Counted from the start, so a slow tote read leaves Gemini less time rather than overrunning.
   const requestId = crypto.randomUUID();
   const startedAt = Date.now();
@@ -175,7 +174,7 @@ export async function POST(req: Request) {
   console.info('[pantry-recipes]', { requestId, event: 'pantry_loaded', elapsedMs: Date.now() - startedAt, ok: pantryRes.ok });
   const checkedAt = Date.now();
   if (!pantryRes.ok) {
-    return Response.json({ ok: false, pantryError: { reason: pantryRes.reason, message: pantryRes.message } } satisfies PantryRecipesResponse);
+    return Response.json({ ok: false, error: pantryRes.message, code: pantryRes.reason, pantryError: { reason: pantryRes.reason, message: pantryRes.message } }, { status: pantryFailureStatus(pantryRes.reason) });
   }
   const pantry = pantryRes.items;
   if (pantry.length === 0) {
@@ -237,7 +236,7 @@ export async function POST(req: Request) {
       items: pantry.map(p => ({ name: p.name, low: p.status === 'LOW' })),
     },
     recipes: recipes.slice(0, SHOW),
-    fingerprint: pantryFingerprint(pantry),
+    fingerprint: pantryFingerprint(pantry, pantryRes.connectionId),
     checkedAt,
     ...(mode === 'protein' ? { targets, noneMatched: recipes.length === 0 } : {}),
   } satisfies PantryRecipesResponse);
