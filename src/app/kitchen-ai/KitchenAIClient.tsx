@@ -4,7 +4,7 @@ import { useEffect, useId, useState, type ReactNode } from 'react';
 import { useKitchenPantry } from '@/components/kitchen/useKitchenPantry';
 import { matchCookbook } from '@/lib/pantry-matching';
 import { suggestionsMatch } from '@/lib/kitchen-cache';
-import { AlertCircle, Dumbbell, Flame, Loader2, Refrigerator, RefreshCw, Sparkles, TrendingUp } from 'lucide-react';
+import { AlertCircle, BookOpen, Dumbbell, Flame, Loader2, Refrigerator, RefreshCw, Sparkles, TrendingUp } from 'lucide-react';
 import { CookbookRecipeCard, IdeaCard, PantryRecipeCard, VideoCard } from '@/components/kitchen/KitchenCards';
 import { Skeleton } from '@/components/Skeleton';
 import {
@@ -96,6 +96,7 @@ async function readError(res: Response): Promise<string> {
 export default function KitchenAIClient({ initialTab, storageScope }: { initialTab: TabId; storageScope: string }) {
   const KEY = Object.fromEntries(Object.entries(STORAGE_KEYS).map(([name, key]) => [name, `${key}:${storageScope}`])) as Record<keyof typeof STORAGE_KEYS, string>;
   const [tab, setTab] = useState<TabId>(initialTab);
+  const [resultView, setResultView] = useState<'saved' | 'new'>('saved');
   const [discover, setDiscover] = useState<Cached<DiscoverData> | null>(() => sGet(KEY.discover));
   const [pantry, setPantry] = useState<Cached<PantryRecipesResponse> | null>(() => sGet(KEY.pantry));
   const [protein, setProtein] = useState<Cached<PantryRecipesResponse> | null>(() => sGet(KEY.protein));
@@ -207,6 +208,7 @@ export default function KitchenAIClient({ initialTab, storageScope }: { initialT
 
   async function runPantry(mode: PantryMode, override?: Targets) {
     const id: TabId = mode;
+    setResultView('new');
     setFlag(id, true);
     setError(id, null);
     const picked = cuisine[id];
@@ -351,63 +353,87 @@ export default function KitchenAIClient({ initialTab, storageScope }: { initialT
             {livePantry.snapshot && <details className="mt-3 text-sm text-ink-muted"><summary className="cursor-pointer">View pantry items</summary><div className="mt-2 flex flex-wrap gap-1.5">{livePantry.snapshot.items.map((i, index) => <span key={`${i.name}-${index}`} className="rounded bg-surface-hover px-2 py-1 text-xs">{i.name}{i.quantity ? ` · ${i.quantity} ${i.unit ?? ''}` : ''}{i.status === 'LOW' ? ' · running low' : ''}</span>)}</div></details>}
             {livePantry.snapshot?.items.length === 0 && <p className="mt-2 text-sm text-ink-muted">Nothing is in stock or running low. Add food in tote, then refresh pantry.</p>}
           </div>
-          <h2 className="font-display text-xl font-semibold text-ink">From your recipes</h2>
-          <p className="text-xs text-ink-muted">Matches recognize ingredient aliases such as haldi and turmeric powder. Diet, tagged cuisine, meal type and time filters apply. Other requests apply to new AI dishes. Check quantities; basic salt, pepper, water and cooking oil are assumed available.</p>
-          {tab === 'protein' && <p className="text-xs text-ink-muted">Saved recipes must have nutrition meeting {targets.minProtein} g protein and at most {targets.maxCalories} kcal per serving.</p>}
-          {livePantry.loadingCookbook && <p role="status" className="text-sm text-ink-muted">Checking your saved recipes…</p>}
-          {livePantry.cookbookError && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{livePantry.cookbookError}{livePantry.cookbook ? ' Showing previously loaded recipes.' : ''}</p>}
-          {cookbookMatches && <>
-            {cookbookMatches.matches.length ? <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{cookbookMatches.matches.map((recipe, index) => <CookbookRecipeCard key={recipe.id} recipe={recipe} index={index} />)}</div> : cookbookMatches.cuisineUnknown.length ? null : <p className="text-sm text-ink-muted">No saved recipes matched every filter. Check the reasons below or try Any cuisine.</p>}
-            {cookbookMatches.cuisineUnknown.length > 0 && <div className="space-y-3">
-              <h3 className="font-display text-lg font-semibold text-ink">Cuisine not tagged</h3>
-              <p className="text-sm text-ink-muted">These recipes match your pantry and other filters, but their saved metadata does not confirm {picked} cuisine.</p>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{cookbookMatches.cuisineUnknown.map((recipe, index) => <CookbookRecipeCard key={recipe.id} recipe={recipe} index={index} cuisineUnverified />)}</div>
-            </div>}
-            {Object.values(cookbookMatches.excluded).some(count => count > 0) && <details className="text-xs text-ink-muted">
-              <summary className="cursor-pointer">Why other saved recipes were excluded</summary>
-              <ul className="mt-2 list-disc space-y-1 pl-4">
-                {cookbookMatches.excluded.cuisine > 0 && <li>{cookbookMatches.excluded.cuisine} tagged with a different cuisine.</li>}
-                {cookbookMatches.excluded.meal > 0 && <li>{cookbookMatches.excluded.meal} missing the requested meal-type tag.</li>}
-                {cookbookMatches.excluded.diet > 0 && <li>{cookbookMatches.excluded.diet} outside the selected diet.</li>}
-                {cookbookMatches.excluded.time > 0 && <li>{cookbookMatches.excluded.time} missing timing data or over your time limit.</li>}
-                {cookbookMatches.excluded.nutrition > 0 && <li>{cookbookMatches.excluded.nutrition} outside your protein/calorie targets.</li>}
-                {cookbookMatches.excluded.noPantryOverlap > 0 && <li>{cookbookMatches.excluded.noPantryOverlap} had no recognized non-staple ingredients in your pantry. Unrecognized names and unspecified spice mixes may need more specific names.</li>}
-              </ul>
-            </details>}
-            {cookbookMatches.missingNutrition > 0 && <p className="text-xs text-ink-faint">{cookbookMatches.missingNutrition} saved recipes excluded because protein or calories are missing.</p>}
-            {cookbookMatches.missingIngredients > 0 && <p className="text-xs text-ink-faint">{cookbookMatches.missingIngredients} saved recipes excluded because no ingredient list could be read.</p>}
-          </>}
+          <div role="group" aria-label="Recipe results" className="flex gap-1 rounded-xl border border-border bg-surface-card p-1">
+            {([
+              { id: 'saved', label: 'From your recipes', icon: BookOpen },
+              { id: 'new', label: 'New dishes to try', icon: Sparkles },
+            ] as const).map(view => {
+              const Icon = view.icon;
+              return (
+                <button
+                  key={view.id}
+                  type="button"
+                  aria-pressed={resultView === view.id}
+                  aria-controls={`kitchen-results-${view.id}`}
+                  onClick={() => setResultView(view.id)}
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${resultView === view.id ? 'bg-accent text-white' : 'text-ink-muted hover:bg-surface-hover hover:text-ink'}`}
+                >
+                  <Icon size={15} className="shrink-0" />
+                  {view.label}
+                </button>
+              );
+            })}
+          </div>
+          <div id="kitchen-results-saved" hidden={resultView !== 'saved'} className="space-y-4">
+            <h2 className="font-display text-xl font-semibold text-ink">From your recipes</h2>
+            <p className="text-xs text-ink-muted">Matches recognize ingredient aliases such as haldi and turmeric powder. Diet, tagged cuisine, meal type and time filters apply. Other requests apply to new AI dishes. Check quantities; basic salt, pepper, water and cooking oil are assumed available.</p>
+            {tab === 'protein' && <p className="text-xs text-ink-muted">Saved recipes must have nutrition meeting {targets.minProtein} g protein and at most {targets.maxCalories} kcal per serving.</p>}
+            {livePantry.loadingCookbook && <p role="status" className="text-sm text-ink-muted">Checking your saved recipes…</p>}
+            {livePantry.cookbookError && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{livePantry.cookbookError}{livePantry.cookbook ? ' Showing previously loaded recipes.' : ''}</p>}
+            {cookbookMatches && <>
+              {cookbookMatches.matches.length ? <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{cookbookMatches.matches.map((recipe, index) => <CookbookRecipeCard key={recipe.id} recipe={recipe} index={index} />)}</div> : cookbookMatches.cuisineUnknown.length ? null : <p className="text-sm text-ink-muted">No saved recipes matched every filter. Check the reasons below or try Any cuisine.</p>}
+              {cookbookMatches.cuisineUnknown.length > 0 && <div className="space-y-3">
+                <h3 className="font-display text-lg font-semibold text-ink">Cuisine not tagged</h3>
+                <p className="text-sm text-ink-muted">These recipes match your pantry and other filters, but their saved metadata does not confirm {picked} cuisine.</p>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{cookbookMatches.cuisineUnknown.map((recipe, index) => <CookbookRecipeCard key={recipe.id} recipe={recipe} index={index} cuisineUnverified />)}</div>
+              </div>}
+              {Object.values(cookbookMatches.excluded).some(count => count > 0) && <details className="text-xs text-ink-muted">
+                <summary className="cursor-pointer">Why other saved recipes were excluded</summary>
+                <ul className="mt-2 list-disc space-y-1 pl-4">
+                  {cookbookMatches.excluded.cuisine > 0 && <li>{cookbookMatches.excluded.cuisine} tagged with a different cuisine.</li>}
+                  {cookbookMatches.excluded.meal > 0 && <li>{cookbookMatches.excluded.meal} missing the requested meal-type tag.</li>}
+                  {cookbookMatches.excluded.diet > 0 && <li>{cookbookMatches.excluded.diet} outside the selected diet.</li>}
+                  {cookbookMatches.excluded.time > 0 && <li>{cookbookMatches.excluded.time} missing timing data or over your time limit.</li>}
+                  {cookbookMatches.excluded.nutrition > 0 && <li>{cookbookMatches.excluded.nutrition} outside your protein/calorie targets.</li>}
+                  {cookbookMatches.excluded.noPantryOverlap > 0 && <li>{cookbookMatches.excluded.noPantryOverlap} had no recognized non-staple ingredients in your pantry. Unrecognized names and unspecified spice mixes may need more specific names.</li>}
+                </ul>
+              </details>}
+              {cookbookMatches.missingNutrition > 0 && <p className="text-xs text-ink-faint">{cookbookMatches.missingNutrition} saved recipes excluded because protein or calories are missing.</p>}
+              {cookbookMatches.missingIngredients > 0 && <p className="text-xs text-ink-faint">{cookbookMatches.missingIngredients} saved recipes excluded because no ingredient list could be read.</p>}
+            </>}
+          </div>
         </section>
       )}
-      {tab !== 'discover' && <h2 className="mb-3 font-display text-xl font-semibold text-ink">New dishes to try</h2>}
-      {current && !matches && <p role="status" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">Previous suggestions: the pantry or settings have changed, these results are over a day old, or their pantry has not been verified. Generate suggestions to update them.</p>}
-      {errors[tab] && (
-        <div className="mb-6 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
-          <AlertCircle size={16} className="mt-0.5 shrink-0" />
-          <span>{errors[tab]}{current ? ' Previous suggestions are shown below; this attempt did not update them.' : ''}</span>
-        </div>
-      )}
-
-      {busy && !current ? (
-        <ResultsSkeleton />
-      ) : (
-        <div className={busy ? 'pointer-events-none opacity-50 transition-opacity' : 'transition-opacity'}>
-          {tab === 'discover' && (discover ? <DiscoverResults data={discover.data} cuisine={discover.cuisine} isSaved={isSaved} onSave={saveIdea} /> : <EmptyState tab="discover" />)}
-          {tab === 'pantry' && (livePantry.linkBlocked ? <Notice title="Connect your tote account" body="Use the same verified email in Cookbook and tote, then refresh pantry." /> : pantry ? <PantryResults data={pantry.data} diet={pantry.diet ?? diet} isSaved={isSaved} onSave={saveIdea} /> : <EmptyState tab="pantry" />)}
-          {tab === 'protein' && (
-            livePantry.linkBlocked ? <Notice title="Connect your tote account" body="Use the same verified email in Cookbook and tote, then refresh pantry." /> : protein ? (
-              <PantryResults
-                data={protein.data}
-                diet={protein.diet ?? diet}
-                isSaved={isSaved}
-                onSave={saveIdea}
-                protein
-                onUseDefaults={applyDefaultTargets}
-              />
-            ) : <EmptyState tab="protein" />
-          )}
-        </div>
-      )}
+      <div id="kitchen-results-new" hidden={tab !== 'discover' && resultView !== 'new'}>
+        {tab !== 'discover' && <h2 className="mb-3 font-display text-xl font-semibold text-ink">New dishes to try</h2>}
+        {current && !matches && <p role="status" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">Previous suggestions: the pantry or settings have changed, these results are over a day old, or their pantry has not been verified. Generate suggestions to update them.</p>}
+        {errors[tab] && (
+          <div className="mb-6 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+            <AlertCircle size={16} className="mt-0.5 shrink-0" />
+            <span>{errors[tab]}{current ? ' Previous suggestions are shown below; this attempt did not update them.' : ''}</span>
+          </div>
+        )}
+        {busy && !current ? (
+          <ResultsSkeleton />
+        ) : (
+          <div className={busy ? 'pointer-events-none opacity-50 transition-opacity' : 'transition-opacity'}>
+            {tab === 'discover' && (discover ? <DiscoverResults data={discover.data} cuisine={discover.cuisine} isSaved={isSaved} onSave={saveIdea} /> : <EmptyState tab="discover" />)}
+            {tab === 'pantry' && (livePantry.linkBlocked ? <Notice title="Connect your tote account" body="Use the same verified email in Cookbook and tote, then refresh pantry." /> : pantry ? <PantryResults data={pantry.data} diet={pantry.diet ?? diet} isSaved={isSaved} onSave={saveIdea} /> : <EmptyState tab="pantry" />)}
+            {tab === 'protein' && (
+              livePantry.linkBlocked ? <Notice title="Connect your tote account" body="Use the same verified email in Cookbook and tote, then refresh pantry." /> : protein ? (
+                <PantryResults
+                  data={protein.data}
+                  diet={protein.diet ?? diet}
+                  isSaved={isSaved}
+                  onSave={saveIdea}
+                  protein
+                  onUseDefaults={applyDefaultTargets}
+                />
+              ) : <EmptyState tab="protein" />
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
